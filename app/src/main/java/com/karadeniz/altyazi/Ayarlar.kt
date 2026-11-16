@@ -84,6 +84,11 @@ class Ayarlar(private val context: Context) {
         get() = p.getBoolean("sadece", false)
         set(v) = p.edit().putBoolean("sadece", v).apply()
 
+    /** Tam ekran modunda çeviri TV'ye de gitsin mi? Kapalıysa yalnızca telefonda görünür. */
+    var sadeceTvGonder: Boolean
+        get() = p.getBoolean("sadeceTv", true)
+        set(v) = p.edit().putBoolean("sadeceTv", v).apply()
+
     var geceModu: Boolean
         get() = p.getBoolean("gece", true)
         set(v) = p.edit().putBoolean("gece", v).apply()

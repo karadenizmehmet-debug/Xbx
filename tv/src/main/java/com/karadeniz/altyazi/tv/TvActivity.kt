@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.graphics.Typeface
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -11,6 +12,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -21,6 +23,21 @@ import java.net.NetworkInterface
 class TvActivity : Activity() {
 
     private lateinit var durum: TextView
+    private lateinit var testResim: ImageView
+    private var gosterilenResim: Any? = null
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != 7) return
+        if (resultCode == RESULT_OK && data != null) {
+            val i = Intent(this, AltyaziServisi::class.java)
+                .setAction(AltyaziServisi.EYLEM_TEST)
+                .putExtra(AltyaziServisi.EK_KOD, resultCode)
+                .putExtra(AltyaziServisi.EK_VERI, data)
+            if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
+        } else AltyaziServisi.testSonucu = "Ekran yakalama izni verilmedi."
+    }
     private val ana = Handler(Looper.getMainLooper())
     private val yenile = object : Runnable {
         override fun run() { durumuYaz(); ana.postDelayed(this, 1500) }
@@ -87,6 +104,30 @@ class TvActivity : Activity() {
             requestFocus()
         })
 
+        kok.addView(Button(this).apply {
+            text = "Ekran okuma testi (Remote Play'siz çalışır mı?)"
+            setOnClickListener {
+                if (!Settings.canDrawOverlays(this@TvActivity)) {
+                    durum.append("\n\nTest için önce katman izni gerekli.")
+                    return@setOnClickListener
+                }
+                try {
+                    val mpm = getSystemService(MediaProjectionManager::class.java)
+                    @Suppress("DEPRECATION")
+                    startActivityForResult(mpm.createScreenCaptureIntent(), 7)
+                } catch (_: Exception) {
+                    AltyaziServisi.testSonucu = "Bu TV'de ekran yakalama izni ekranı yok ✗"
+                }
+            }
+        })
+        kok.addView(TextView(this).apply {
+            text = "Test: izni ver, 15 sn içinde Xbox'a (HDMI) geç. Sonuç oyunun üstünde ve bu ekranda görünür."
+            textSize = 14f
+            alpha = 0.75f
+        })
+        testResim = ImageView(this).apply { adjustViewBounds = true }
+        kok.addView(testResim, LinearLayout.LayoutParams(dp(320), -2).apply { topMargin = dp(8) })
+
         kok.addView(TextView(this).apply {
             text = "İzin ekranı açılmıyorsa bilgisayardan bir kez:\n" +
                 "adb shell appops set $packageName SYSTEM_ALERT_WINDOW allow\n\n" +
@@ -115,7 +156,10 @@ class TvActivity : Activity() {
         durum.text = "Telefona yazılacak TV adresi:  ${ipAdresi() ?: "ağ bağlantısı yok"}\n" +
             "Sunucu (port ${AltyaziServisi.PORT}):  ${if (AltyaziServisi.sunucuCalisiyor) "çalışıyor ✓" else "çalışmıyor ✗"}\n" +
             "Katman izni:  ${if (izin) "verildi ✓" else "YOK ✗ — altyazı görünmez"}\n" +
-            "Son gelen:  ${AltyaziServisi.sonMesaj}"
+            "Son gelen:  ${AltyaziServisi.sonMesaj}\n" +
+            "Ekran okuma testi:  ${AltyaziServisi.testSonucu}"
+        val r = AltyaziServisi.testResmi
+        if (r !== gosterilenResim) { gosterilenResim = r; testResim.setImageBitmap(r) }
     }
 
     private fun ipAdresi(): String? = try {

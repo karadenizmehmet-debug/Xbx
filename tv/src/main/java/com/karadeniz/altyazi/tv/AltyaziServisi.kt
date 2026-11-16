@@ -6,7 +6,18 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.graphics.Bitmap
 import android.graphics.Color
+import android.hardware.display.DisplayManager
+import android.hardware.display.VirtualDisplay
+import android.media.ImageReader
+import android.media.projection.MediaProjection
+import android.media.projection.MediaProjectionManager
+import android.os.Build
+import android.os.HandlerThread
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -37,6 +48,12 @@ class AltyaziServisi : Service() {
         private const val GUVENLIK_GIZLE_MS = 20_000L
         @Volatile var sonMesaj = "Henüz altyazı gelmedi."
         @Volatile var sunucuCalisiyor = false
+        const val EYLEM_TEST = "ekran_testi"
+        const val EK_KOD = "kod"
+        const val EK_VERI = "veri"
+        private const val GERI_SAYIM = 15
+        @Volatile var testSonucu = "Henüz yapılmadı."
+        @Volatile var testResmi: Bitmap? = null
 
         fun baslat(ctx: Context) {
             val i = Intent(ctx, AltyaziServisi::class.java)
@@ -54,24 +71,156 @@ class AltyaziServisi : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    private fun bildirim(): Notification = Notification.Builder(this, KANAL)
+        .setSmallIcon(android.R.drawable.ic_menu_view)
+        .setContentTitle("Altyazı TV çalışıyor")
+        .setContentText("Telefondan altyazı bekleniyor")
+        .setOngoing(true)
+        .build()
+
     override fun onCreate() {
         super.onCreate()
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(KANAL, "Altyazı TV", NotificationManager.IMPORTANCE_LOW))
-        val b: Notification = Notification.Builder(this, KANAL)
-            .setSmallIcon(android.R.drawable.ic_menu_view)
-            .setContentTitle("Altyazı TV çalışıyor")
-            .setContentText("Telefondan altyazı bekleniyor")
-            .setOngoing(true)
-            .build()
-        startForeground(1, b)
+        startForeground(1, bildirim())
 
         sunucu = Sunucu(PORT) { yol, govde -> istek(yol, govde) }.also { it.start() }
         sunucuCalisiyor = true
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == EYLEM_TEST) {
+            val veri: Intent? = if (Build.VERSION.SDK_INT >= 33)
+                intent.getParcelableExtra(EK_VERI, Intent::class.java)
+            else @Suppress("DEPRECATION") intent.getParcelableExtra(EK_VERI)
+            if (veri != null) ekranTesti(intent.getIntExtra(EK_KOD, 0), veri)
+        }
+        return START_STICKY
+    }
+
+    // ---------- Ekran okuma testi ----------
+    // Soru: TV, HDMI'dan gelen Xbox görüntüsünü bir uygulamaya okutuyor mu, yoksa siyah mı veriyor?
+
+    private var testProj: MediaProjection? = null
+    private var testEkran: VirtualDisplay? = null
+    private var testOkuyucu: ImageReader? = null
+    private var testIs: HandlerThread? = null
+    private var sonucKutusu: View? = null
+    private val kareKilidi = Any()
+    private var sonKare: Bitmap? = null
+
+    private fun ekranTesti(kod: Int, veri: Intent) {
+        if (testProj != null) return
+        try {
+            if (Build.VERSION.SDK_INT >= 29)
+                startForeground(1, bildirim(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+            val mp = getSystemService(MediaProjectionManager::class.java).getMediaProjection(kod, veri)
+            if (mp == null) { testSonucu = "Ekran yakalama başlatılamadı."; return }
+            testProj = mp
+            mp.registerCallback(object : MediaProjection.Callback() {}, ana)
+            val m = resources.displayMetrics
+            val w = m.widthPixels / 2; val h = m.heightPixels / 2
+            val is_ = HandlerThread("test").also { it.start() }
+            testIs = is_
+            val okuyucu = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 2)
+            testOkuyucu = okuyucu
+            // Gelen her kareyi sakla; en sonuncusu sınanır
+            okuyucu.setOnImageAvailableListener({ r ->
+                val img = try { r.acquireLatestImage() } catch (_: Exception) { null } ?: return@setOnImageAvailableListener
+                try {
+                    val pl = img.planes[0]
+                    val tam = Bitmap.createBitmap(pl.rowStride / pl.pixelStride, img.height, Bitmap.Config.ARGB_8888)
+                    tam.copyPixelsFromBuffer(pl.buffer)
+                    synchronized(kareKilidi) { sonKare?.recycle(); sonKare = tam }
+                } catch (_: Exception) {
+                } finally { img.close() }
+            }, Handler(is_.looper))
+            testEkran = mp.createVirtualDisplay(
+                "altyazi-test", w, h, m.densityDpi,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, okuyucu.surface, null, null
+            )
+            testSonucu = "Test sürüyor…"
+            geriSay(GERI_SAYIM)
+        } catch (e: Exception) {
+            testSonucu = "Bu TV ekran yakalamaya izin vermedi: ${e.javaClass.simpleName}"
+            testiBitir()
+        }
+    }
+
+    private fun geriSay(n: Int) {
+        if (n > 0) {
+            goster("Ekran testi: şimdi Xbox'a (HDMI girişine) geç.  $n", null, 1500)
+            ana.postDelayed({ geriSay(n - 1) }, 1000)
+        } else {
+            // Kendi yazımızı kaldır; bu, ekranın yeniden çizilmesini ve yeni kare gelmesini de sağlar
+            ana.removeCallbacks(gizle)
+            yazi?.visibility = View.GONE
+            ana.postDelayed({ testiDegerlendir() }, 900)
+        }
+    }
+
+    private fun testiDegerlendir() {
+        val kare = synchronized(kareKilidi) { sonKare?.copy(Bitmap.Config.ARGB_8888, false) }
+        testiBitir()
+        if (kare == null) {
+            testSonucu = "Hiç kare gelmedi ✗ — bu TV ekranı uygulamaya vermiyor."
+            sonucuGoster(null, testSonucu)
+            return
+        }
+        // 64x36 noktadan örnekle: kaçında gerçekten görüntü var?
+        var dolu = 0; var toplam = 0
+        for (y in 0 until 36) for (x in 0 until 64) {
+            val px = kare.getPixel(x * (kare.width - 1) / 63, y * (kare.height - 1) / 35)
+            val parlaklik = (Color.red(px) * 3 + Color.green(px) * 6 + Color.blue(px)) / 10
+            if (parlaklik > 28) dolu++
+            toplam++
+        }
+        val yuzde = dolu * 100 / toplam
+        testSonucu = if (yuzde >= 8)
+            "Görüntü okunabiliyor olabilir ✓ (%$yuzde dolu). Küçük resimde oyun görünüyorsa Remote Play'siz çalışır."
+        else
+            "Siyah geldi ✗ (%$yuzde dolu). TV, HDMI görüntüsünü uygulamaya vermiyor; Remote Play gerekli."
+        testResmi = kare
+        sonucuGoster(kare, testSonucu)
+    }
+
+    private fun sonucuGoster(resim: Bitmap?, metin: String) {
+        if (!katmaniKur()) return
+        val k = kok ?: return
+        sonucKutusu?.let { k.removeView(it) }
+        val h = resources.displayMetrics.heightPixels
+        val kutu = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            val d = (h * 0.02f).toInt()
+            setPadding(d, d, d, d)
+            background = GradientDrawable().apply { cornerRadius = h * 0.02f; setColor(Color.argb(235, 20, 20, 20)) }
+        }
+        if (resim != null) kutu.addView(ImageView(this).apply {
+            setImageBitmap(resim)
+            adjustViewBounds = true
+        }, LinearLayout.LayoutParams((h * 0.62f).toInt(), -2))
+        kutu.addView(TextView(this).apply {
+            text = "Uygulamanın gördüğü ekran (25 sn):\n$metin"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_PX, h * 0.03f)
+            gravity = Gravity.CENTER
+            maxWidth = (h * 0.9f).toInt()
+        })
+        k.addView(kutu, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        sonucKutusu = kutu
+        ana.postDelayed({ if (sonucKutusu === kutu) { k.removeView(kutu); sonucKutusu = null } }, 25_000)
+    }
+
+    private fun testiBitir() {
+        try { testEkran?.release() } catch (_: Exception) {}
+        try { testOkuyucu?.close() } catch (_: Exception) {}
+        try { testProj?.stop() } catch (_: Exception) {}
+        testEkran = null; testOkuyucu = null; testProj = null
+        testIs?.quitSafely(); testIs = null
+        synchronized(kareKilidi) { sonKare?.recycle(); sonKare = null }
+    }
 
     private fun istek(yol: String, govde: String): Pair<Int, String> {
         if (yol.startsWith("/ping")) return 200 to "{\"ok\":true,\"surum\":\"${BuildConfig.VERSION_NAME}\"}"
@@ -191,6 +340,7 @@ class AltyaziServisi : Service() {
 
     override fun onDestroy() {
         sunucu?.durdur(); sunucu = null
+        testiBitir()
         sunucuCalisiyor = false
         ana.removeCallbacksAndMessages(null)
         kok?.let { try { wm.removeView(it) } catch (_: Exception) {} }

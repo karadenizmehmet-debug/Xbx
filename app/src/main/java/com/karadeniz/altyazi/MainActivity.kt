@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
@@ -175,15 +174,24 @@ class MainActivity : AppCompatActivity() {
             setPadding(0, dp(10), 0, dp(4))
         })
 
+        val tvSecenek = MaterialSwitch(this).apply {
+            text = "    ↳ Tam ekran modunda TV'ye de gönder"
+            isChecked = ayar.sadeceTvGonder
+            isEnabled = ayar.sadeceAltyazi
+            setOnCheckedChangeListener { _, b -> ayar.sadeceTvGonder = b }
+            setPadding(0, dp(2), 0, dp(4))
+        }
         kok.addView(MaterialSwitch(this).apply {
-            text = "Sadece altyazı modu (ekran kararır, büyük Türkçe yazı)"
+            text = "Tam ekran altyazı modu (telefon kararır, büyük Türkçe yazı)"
             isChecked = ayar.sadeceAltyazi
             setOnCheckedChangeListener { _, b ->
                 ayar.sadeceAltyazi = b
+                tvSecenek.isEnabled = b
                 if (Durum.calisiyor) kisa("Durdurup yeniden başlatınca geçerli olur.")
             }
-            setPadding(0, dp(4), 0, dp(4))
+            setPadding(0, dp(4), 0, dp(2))
         })
+        kok.addView(tvSecenek)
 
         kok.addView(MaterialSwitch(this).apply {
             text = "Çevrimiçi çeviri (daha doğal, internet gerekir)"
@@ -408,10 +416,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun ekranIzniIste() {
         val mpm = getSystemService(MediaProjectionManager::class.java)
-        val niyet = if (Build.VERSION.SDK_INT >= 34)
-            mpm.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
-        else mpm.createScreenCaptureIntent()
-        ekranIzni.launch(niyet)
+        // Yapılandırma yok: sistem "tek uygulama / tüm ekran" seçimini kullanıcıya bırakır
+        ekranIzni.launch(mpm.createScreenCaptureIntent())
     }
 
     private fun paylas() {

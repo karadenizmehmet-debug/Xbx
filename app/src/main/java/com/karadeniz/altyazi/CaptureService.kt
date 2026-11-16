@@ -96,6 +96,7 @@ class CaptureService : Service() {
     private var ceviriKutusu: TextView? = null
     private var ceviriKap: FrameLayout? = null
     private var maske: View? = null
+    private var maskeCizim: View? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -353,7 +354,7 @@ class CaptureService : Service() {
     }
 
     private fun yayinla(tr: String, orijinal: String) {
-        val adres = ayar.tvAdresi
+        val adres = tvHedef()
         sonTr = tr
         if (adres.isNotBlank()) tv.gonder(adres, tr, orijinal, ayar.stilJson())
         ana.post {
@@ -424,8 +425,22 @@ class CaptureService : Service() {
                 WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT, true
             )
             mlp.flags = mlp.flags or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-            wm.addView(m, mlp)
-            maske = m
+            val mk = FrameLayout(this)
+            mk.addView(m, FrameLayout.LayoutParams(-1, -1))
+            // Her zaman erişilebilir çıkış düğmesi
+            mk.addView(TextView(this).apply {
+                text = "✕  Çık"
+                textSize = 16f
+                setTextColor(Color.WHITE)
+                setPadding(34, 20, 34, 20)
+                background = GradientDrawable().apply { cornerRadius = 40f; setColor(Color.rgb(160, 30, 30)) }
+                setOnClickListener { durdur() }
+            }, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply {
+                topMargin = durumCubugu() + 16; leftMargin = 24
+            })
+            wm.addView(mk, mlp)
+            maske = mk
+            maskeCizim = m
         }
         // Küçük kontrol çubuğu: Bölge seç / Duraklat / Durdur
         val bar = LinearLayout(this).apply {
@@ -453,7 +468,7 @@ class CaptureService : Service() {
             WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, true
         )
         lp.gravity = Gravity.TOP or Gravity.END
-        lp.x = 16; lp.y = 16
+        lp.x = 16; lp.y = 16 + durumCubugu()
         wm.addView(bar, lp)
         kontrolBar = bar
 
@@ -498,9 +513,9 @@ class CaptureService : Service() {
     /** Boyut, konum, renk ve şeffaflık ayarlarını çeviri kutusuna uygular. */
     private fun stilUygula(ornekGoster: Boolean) {
         // Ayar değişince TV'ye de hemen yansıt (altyazı yoksa 2,5 sn'lik örnek)
-        if (ornekGoster && ayar.tvAdresi.isNotBlank()) {
-            if (ekrandaMetinVar && sonTr.isNotBlank()) tv.gonder(ayar.tvAdresi, sonTr, "", ayar.stilJson())
-            else tv.gonder(ayar.tvAdresi, "Örnek altyazı metni", "", ayar.stilJson(), 2500)
+        if (ornekGoster && tvHedef().isNotBlank()) {
+            if (ekrandaMetinVar && sonTr.isNotBlank()) tv.gonder(tvHedef(), sonTr, "", ayar.stilJson())
+            else tv.gonder(tvHedef(), "Örnek altyazı metni", "", ayar.stilJson(), 2500)
         }
         val k = ceviriKutusu ?: return
         k.textSize = etkinBoyut().toFloat()
@@ -558,6 +573,16 @@ class CaptureService : Service() {
         else RectF(0.04f, (o.bottom + 0.02f).coerceAtMost(0.8f), 0.96f, 0.96f)
     }
 
+    /** Tam ekran modunda "yalnızca telefon" seçiliyse TV'ye gönderme. */
+    private fun tvHedef(): String =
+        if (ayar.sadeceAltyazi && !ayar.sadeceTvGonder) "" else ayar.tvAdresi
+
+    /** Durum çubuğu yüksekliği: düğmeler altında kalıp dokunulmaz olmasın. */
+    private fun durumCubugu(): Int {
+        val id = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (id > 0) resources.getDimensionPixelSize(id) else 0
+    }
+
     private fun etkinBoyut(): Int = if (ayar.sadeceAltyazi) 64 else ayar.yaziBoyutu
 
     private fun kutuSec() {
@@ -593,7 +618,8 @@ class CaptureService : Service() {
                 sonGonderilen = ""; aday = ""; adaySayac = 0
                 durum("Bölge kaydedildi.")
             }
-            maske?.let { it.visibility = View.VISIBLE; it.invalidate() }
+            maske?.visibility = View.VISIBLE
+            maskeCizim?.invalidate()
             kontrolBar?.visibility = View.VISIBLE
             duraklat = false
             stilUygula(false)
@@ -608,7 +634,7 @@ class CaptureService : Service() {
         if (!Durum.calisiyor && projeksiyon == null) { stopSelf(); return }
         Durum.calisiyor = false
         isciH?.removeCallbacksAndMessages(null)
-        if (ekrandaMetinVar) tv.gonder(ayar.tvAdresi, "", "")
+        if (ekrandaMetinVar) tv.gonder(tvHedef(), "", "")
         try { sanalEkran?.release() } catch (_: Exception) {}
         try { okuyucu?.close() } catch (_: Exception) {}
         try { projeksiyon?.stop() } catch (_: Exception) {}
@@ -619,7 +645,7 @@ class CaptureService : Service() {
         ceviriKap?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         ceviriKap = null
         maske?.let { try { wm.removeView(it) } catch (_: Exception) {} }
-        maske = null
+        maske = null; maskeCizim = null
         kontrolBar = null; ceviriKutusu = null
         kutuAlani = null; barAlani = null
         Durum.stilDinleyici = null
