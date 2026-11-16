@@ -79,6 +79,11 @@ class Ayarlar(private val context: Context) {
                 .put(k.right.toDouble()).put(k.bottom.toDouble()))
     }
 
+    /** Telefon ekranını karart, yalnızca büyük Türkçe altyazıyı göster (telefon TV'nin altında dururken). */
+    var sadeceAltyazi: Boolean
+        get() = p.getBoolean("sadece", false)
+        set(v) = p.edit().putBoolean("sadece", v).apply()
+
     var geceModu: Boolean
         get() = p.getBoolean("gece", true)
         set(v) = p.edit().putBoolean("gece", v).apply()

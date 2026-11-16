@@ -10,7 +10,10 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
@@ -92,6 +95,7 @@ class CaptureService : Service() {
     private var kontrolBar: View? = null
     private var ceviriKutusu: TextView? = null
     private var ceviriKap: FrameLayout? = null
+    private var maske: View? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -401,6 +405,28 @@ class CaptureService : Service() {
     }
 
     private fun kaplamalariGoster() {
+        // Sadece altyazı modu: okuma bölgesi dışında her yeri karart.
+        // Dokunuşları da yutar; telefon TV'nin altında dururken oyuna yanlışlıkla basılmaz.
+        if (ayar.sadeceAltyazi) {
+            val m = object : View(this) {
+                private val boya = Paint().apply { color = Color.BLACK }
+                override fun onDraw(c: Canvas) {
+                    val o = ayar.bolge
+                    val w = width.toFloat(); val h = height.toFloat()
+                    val l = o.left * w; val t = o.top * h; val r = o.right * w; val b = o.bottom * h
+                    c.drawRect(0f, 0f, w, t, boya)
+                    c.drawRect(0f, b, w, h, boya)
+                    c.drawRect(0f, t, l, b, boya)
+                    c.drawRect(r, t, w, b, boya)
+                }
+            }
+            val mlp = kaplamaParam(
+                WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT, true
+            )
+            mlp.flags = mlp.flags or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            wm.addView(m, mlp)
+            maske = m
+        }
         // Küçük kontrol çubuğu: Bölge seç / Duraklat / Durdur
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -431,7 +457,7 @@ class CaptureService : Service() {
         wm.addView(bar, lp)
         kontrolBar = bar
 
-        if (ayar.telefondaGoster) {
+        if (ayar.telefondaGoster || ayar.sadeceAltyazi) {
             val kutu = TextView(this).apply {
                 setTextColor(Color.WHITE)
                 textSize = 18f
@@ -477,14 +503,14 @@ class CaptureService : Service() {
             else tv.gonder(ayar.tvAdresi, "Örnek altyazı metni", "", ayar.stilJson(), 2500)
         }
         val k = ceviriKutusu ?: return
-        k.textSize = ayar.yaziBoyutu.toFloat()
+        k.textSize = etkinBoyut().toFloat()
         k.setTextColor(ayar.yaziRengi)
         val parlak = Color.luminance(ayar.yaziRengi) > 0.5f
         k.setShadowLayer(4f, 0f, 0f, if (parlak) Color.BLACK else Color.WHITE)
         (k.background as GradientDrawable).setColor(ayar.arkaArgb())
         k.typeface = YaziTipleri.getir(this, ayar.yaziTipi)
         val kap = ceviriKap ?: return
-        val o = ayar.kutu
+        val o = etkinKutu()
         val lp = kap.layoutParams as WindowManager.LayoutParams
         lp.x = (o.left * genislik).toInt()
         lp.y = (o.top * yukseklik).toInt()
@@ -504,11 +530,11 @@ class CaptureService : Service() {
     /** Yazı kutuya sığmıyorsa sığana kadar küçültür (en çok ayarlanan boyut, en az 8). */
     private fun sigdir() {
         val k = ceviriKutusu ?: return
-        val o = ayar.kutu
+        val o = etkinKutu()
         val w = ((o.right - o.left) * genislik).toInt().coerceAtLeast(80) - k.paddingLeft - k.paddingRight
         val h = ((o.bottom - o.top) * yukseklik).toInt().coerceAtLeast(40) - k.paddingTop - k.paddingBottom
         val metin = k.text
-        var boyut = ayar.yaziBoyutu
+        var boyut = etkinBoyut()
         if (w > 0 && h > 0 && metin.isNotEmpty()) {
             val boya = TextPaint(k.paint)
             while (boyut > 8) {
@@ -524,13 +550,25 @@ class CaptureService : Service() {
         k.textSize = boyut.toFloat()
     }
 
+    /** Sadece altyazı modunda kutu = okuma bölgesinin üstündeki (ya da altındaki) tüm boş alan. */
+    private fun etkinKutu(): RectF {
+        if (!ayar.sadeceAltyazi) return ayar.kutu
+        val o = ayar.bolge
+        return if (o.top >= 1f - o.bottom) RectF(0.04f, 0.04f, 0.96f, (o.top - 0.02f).coerceAtLeast(0.2f))
+        else RectF(0.04f, (o.bottom + 0.02f).coerceAtMost(0.8f), 0.96f, 0.96f)
+    }
+
+    private fun etkinBoyut(): Int = if (ayar.sadeceAltyazi) 64 else ayar.yaziBoyutu
+
     private fun kutuSec() {
         duraklat = true
         kontrolBar?.visibility = View.GONE
         ceviriKap?.visibility = View.GONE
+        maske?.visibility = View.GONE
         BolgeSecici(this, wm, ayar.kutu, "Türkçe altyazının görüneceği alanı çiz") { yeni ->
             if (yeni != null) ayar.kutu = yeni
             ceviriKap?.visibility = View.VISIBLE
+            maske?.visibility = View.VISIBLE
             kontrolBar?.visibility = View.VISIBLE
             duraklat = false
             stilUygula(true)
@@ -548,14 +586,17 @@ class CaptureService : Service() {
     private fun bolgeSec() {
         duraklat = true
         kontrolBar?.visibility = View.GONE
+        maske?.visibility = View.GONE
         BolgeSecici(this, wm, ayar.bolge, "İngilizce altyazının çıktığı alanı çiz") { yeni ->
             if (yeni != null) {
                 ayar.bolge = yeni
                 sonGonderilen = ""; aday = ""; adaySayac = 0
                 durum("Bölge kaydedildi.")
             }
+            maske?.let { it.visibility = View.VISIBLE; it.invalidate() }
             kontrolBar?.visibility = View.VISIBLE
             duraklat = false
+            stilUygula(false)
         }.goster()
     }
 
@@ -577,6 +618,8 @@ class CaptureService : Service() {
         kontrolBar?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         ceviriKap?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         ceviriKap = null
+        maske?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+        maske = null
         kontrolBar = null; ceviriKutusu = null
         kutuAlani = null; barAlani = null
         Durum.stilDinleyici = null

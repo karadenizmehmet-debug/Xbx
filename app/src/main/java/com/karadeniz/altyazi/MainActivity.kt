@@ -176,6 +176,16 @@ class MainActivity : AppCompatActivity() {
         })
 
         kok.addView(MaterialSwitch(this).apply {
+            text = "Sadece altyazı modu (ekran kararır, büyük Türkçe yazı)"
+            isChecked = ayar.sadeceAltyazi
+            setOnCheckedChangeListener { _, b ->
+                ayar.sadeceAltyazi = b
+                if (Durum.calisiyor) kisa("Durdurup yeniden başlatınca geçerli olur.")
+            }
+            setPadding(0, dp(4), 0, dp(4))
+        })
+
+        kok.addView(MaterialSwitch(this).apply {
             text = "Çevrimiçi çeviri (daha doğal, internet gerekir)"
             isChecked = ayar.cevrimici
             setOnCheckedChangeListener { _, b -> ayar.cevrimici = b }
