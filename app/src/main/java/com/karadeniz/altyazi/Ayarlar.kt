@@ -4,10 +4,13 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.util.TypedValue
+import org.json.JSONArray
+import org.json.JSONObject
 import androidx.core.content.res.ResourcesCompat
 
 /** Uygulama ayarları (SharedPreferences). Bölge, ekranın oranı olarak (0..1) saklanır. */
-class Ayarlar(context: Context) {
+class Ayarlar(private val context: Context) {
     private val p = context.getSharedPreferences("altyazi", Context.MODE_PRIVATE)
 
     var tvAdresi: String
@@ -59,6 +62,22 @@ class Ayarlar(context: Context) {
     fun arkaArgb(): Int = Color.argb(
         arkaOpaklik * 255 / 100, Color.red(arkaRengi), Color.green(arkaRengi), Color.blue(arkaRengi)
     )
+
+    /** TV'ye gönderilen görünüm. Boyut, ekranın kısa kenarına oranla gider (TV'de aynı oranda görünür). */
+    fun stilJson(): JSONObject {
+        val m = context.resources.displayMetrics
+        val kisa = minOf(m.widthPixels, m.heightPixels).coerceAtLeast(1)
+        val px = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, yaziBoyutu.toFloat(), m)
+        val k = kutu
+        return JSONObject()
+            .put("boyutOran", (px / kisa).toDouble())
+            .put("tip", yaziTipi)
+            .put("yaziRengi", yaziRengi)
+            .put("arkaRengi", arkaRengi)
+            .put("arkaOpaklik", arkaOpaklik)
+            .put("kutu", JSONArray().put(k.left.toDouble()).put(k.top.toDouble())
+                .put(k.right.toDouble()).put(k.bottom.toDouble()))
+    }
 
     var geceModu: Boolean
         get() = p.getBoolean("gece", true)

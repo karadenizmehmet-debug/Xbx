@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "Altyazi"
 include(":app")
+include(":tv")

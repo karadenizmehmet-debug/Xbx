@@ -153,8 +153,17 @@ class MainActivity : AppCompatActivity() {
                 ayar.tvAdresi = tvAlan.text.toString()
                 if (ayar.tvAdresi.isBlank()) { kisa("Önce TV adresini yaz."); return@setOnClickListener }
                 durumYazi.text = "Test gönderiliyor…"
-                tv.gonder(ayar.tvAdresi, "Test altyazı: Merhaba! (Altyazı v${BuildConfig.VERSION_NAME})", "Test") { ok, bilgi ->
-                    runOnUiThread { durumYazi.text = if (ok) "TV yanıt verdi ✓" else "TV'ye ulaşılamadı: $bilgi" }
+                tv.gonder(
+                    ayar.tvAdresi, "Test altyazı: Merhaba! (Altyazı v${BuildConfig.VERSION_NAME})", "Test",
+                    ayar.stilJson(), 5000
+                ) { ok, bilgi ->
+                    runOnUiThread {
+                        durumYazi.text = when {
+                            ok -> "TV yanıt verdi ✓ (5 sn test yazısı görünmeli)"
+                            bilgi == "HTTP 503" -> "TV'ye ulaşıldı ama TV'de katman izni yok."
+                            else -> "TV'ye ulaşılamadı: $bilgi"
+                        }
+                    }
                 }
             }
         })
@@ -267,7 +276,15 @@ class MainActivity : AppCompatActivity() {
             onizleme.setTextColor(ayar.yaziRengi)
             onizleme.typeface = YaziTipleri.getir(this, ayar.yaziTipi)
             (onizleme.background as GradientDrawable).setColor(ayar.arkaArgb())
-            if (bildir) Durum.stilDinleyici?.invoke()
+            if (bildir) {
+                if (Durum.calisiyor) Durum.stilDinleyici?.invoke()
+                else {
+                    // Servis kapalıyken de ayar TV'de görülsün
+                    ayar.tvAdresi = tvAlan.text.toString()
+                    if (ayar.tvAdresi.isNotBlank())
+                        tv.gonder(ayar.tvAdresi, "Örnek altyazı metni", "", ayar.stilJson(), 2500)
+                }
+            }
         }
         b.addView(cerceve, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
         b.addView(kaydirici("Yazı boyutu (en çok)", 12, 44, ayar.yaziBoyutu) { ayar.yaziBoyutu = it; yenile() })

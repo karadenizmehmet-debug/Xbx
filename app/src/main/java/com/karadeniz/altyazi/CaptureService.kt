@@ -273,6 +273,7 @@ class CaptureService : Service() {
     @Volatile private var kutuAlani: Rect? = null     // çeviri kutusunun ekrandaki yeri
     @Volatile private var barAlani: Rect? = null      // kontrol çubuğunun ekrandaki yeri
     private var ornekGosteriliyor = false
+    @Volatile private var sonTr = ""
 
     private fun normalize(s: String) = s.lowercase().replace(Regex("[^\\p{L}\\p{N}]"), "")
 
@@ -349,7 +350,8 @@ class CaptureService : Service() {
 
     private fun yayinla(tr: String, orijinal: String) {
         val adres = ayar.tvAdresi
-        if (adres.isNotBlank()) tv.gonder(adres, tr, orijinal)
+        sonTr = tr
+        if (adres.isNotBlank()) tv.gonder(adres, tr, orijinal, ayar.stilJson())
         ana.post {
             ceviriKutusu?.let {
                 ornekGosteriliyor = false
@@ -469,6 +471,11 @@ class CaptureService : Service() {
 
     /** Boyut, konum, renk ve şeffaflık ayarlarını çeviri kutusuna uygular. */
     private fun stilUygula(ornekGoster: Boolean) {
+        // Ayar değişince TV'ye de hemen yansıt (altyazı yoksa 2,5 sn'lik örnek)
+        if (ornekGoster && ayar.tvAdresi.isNotBlank()) {
+            if (ekrandaMetinVar && sonTr.isNotBlank()) tv.gonder(ayar.tvAdresi, sonTr, "", ayar.stilJson())
+            else tv.gonder(ayar.tvAdresi, "Örnek altyazı metni", "", ayar.stilJson(), 2500)
+        }
         val k = ceviriKutusu ?: return
         k.textSize = ayar.yaziBoyutu.toFloat()
         k.setTextColor(ayar.yaziRengi)
