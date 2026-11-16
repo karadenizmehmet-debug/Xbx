@@ -3,6 +3,8 @@ package com.karadeniz.altyazi
 import android.content.Context
 import android.graphics.Color
 import android.graphics.RectF
+import android.graphics.Typeface
+import androidx.core.content.res.ResourcesCompat
 
 /** Uygulama ayarları (SharedPreferences). Bölge, ekranın oranı olarak (0..1) saklanır. */
 class Ayarlar(context: Context) {
@@ -26,10 +28,20 @@ class Ayarlar(context: Context) {
         get() = p.getInt("yaziBoyutu", 18)
         set(v) = p.edit().putInt("yaziBoyutu", v).apply()
 
-    /** Dikey konum: 0 = en üst, 100 = en alt. */
-    var konumYuzde: Int
-        get() = p.getInt("konum", 6)
-        set(v) = p.edit().putInt("konum", v).apply()
+    var yaziTipi: String
+        get() = p.getString("yaziTipi", "varsayilan") ?: "varsayilan"
+        set(v) = p.edit().putString("yaziTipi", v).apply()
+
+    /** Türkçe altyazının gösterileceği alan (ekran oranı). Yazı bu alana sığdırılır. */
+    var kutu: RectF
+        get() = RectF(
+            p.getFloat("kl", 0.15f), p.getFloat("kt", 0.04f),
+            p.getFloat("kr", 0.85f), p.getFloat("kb", 0.28f)
+        )
+        set(r) = p.edit()
+            .putFloat("kl", r.left).putFloat("kt", r.top)
+            .putFloat("kr", r.right).putFloat("kb", r.bottom)
+            .apply()
 
     var yaziRengi: Int
         get() = p.getInt("yaziRengi", Color.WHITE)
@@ -76,4 +88,33 @@ object Durum {
     /** Görünüm ayarı değişti: servis kaplamayı yeniden biçimlendirir. */
     var stilDinleyici: (() -> Unit)? = null
     var sonCeviriDinleyici: ((String, String) -> Unit)? = null
+}
+
+/** Türkçe karakterleri (ğ ş ı İ ö ü ç) destekleyen yazı tipleri. */
+object YaziTipleri {
+    val liste = listOf(
+        "varsayilan" to "Varsayılan",
+        "kalin" to "Kalın",
+        "dar" to "Dar",
+        "nunito" to "Nunito",
+        "oswald" to "Oswald",
+        "comfortaa" to "Comfortaa",
+        "lora" to "Lora",
+        "serif" to "Serif",
+        "esaralik" to "Eş aralıklı"
+    )
+
+    fun getir(ctx: Context, id: String): Typeface = try {
+        when (id) {
+            "kalin" -> Typeface.DEFAULT_BOLD
+            "dar" -> Typeface.create("sans-serif-condensed", Typeface.NORMAL)
+            "serif" -> Typeface.SERIF
+            "esaralik" -> Typeface.MONOSPACE
+            "nunito" -> ResourcesCompat.getFont(ctx, R.font.nunito)
+            "oswald" -> ResourcesCompat.getFont(ctx, R.font.oswald)
+            "comfortaa" -> ResourcesCompat.getFont(ctx, R.font.comfortaa)
+            "lora" -> ResourcesCompat.getFont(ctx, R.font.lora)
+            else -> Typeface.DEFAULT
+        } ?: Typeface.DEFAULT
+    } catch (_: Exception) { Typeface.DEFAULT }
 }

@@ -28,7 +28,10 @@ import android.util.DisplayMetrics
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
-import android.widget.Button
+import android.text.StaticLayout
+import android.text.TextPaint
+import android.util.TypedValue
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.google.mlkit.common.model.DownloadConditions
@@ -88,6 +91,7 @@ class CaptureService : Service() {
 
     private var kontrolBar: View? = null
     private var ceviriKutusu: TextView? = null
+    private var ceviriKap: FrameLayout? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -350,6 +354,7 @@ class CaptureService : Service() {
             ceviriKutusu?.let {
                 ornekGosteriliyor = false
                 it.text = tr
+                sigdir()
                 if (tr.isBlank()) { it.visibility = View.GONE; kutuAlani = null }
                 else it.visibility = View.VISIBLE
             }
@@ -383,9 +388,14 @@ class CaptureService : Service() {
         var bayrak = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
         if (!dokunulabilir) bayrak = bayrak or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        bayrak = bayrak or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         return WindowManager.LayoutParams(
             w, h, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, bayrak, PixelFormat.TRANSLUCENT
-        )
+        ).apply {
+            // Koordinatlar tam ekrana göre olsun (çentik alanı dahil)
+            layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+        }
     }
 
     private fun kaplamalariGoster() {
@@ -397,13 +407,14 @@ class CaptureService : Service() {
             }
             setPadding(10, 4, 10, 4)
         }
-        fun dugme(yazi: String, tik: (Button) -> Unit) = Button(this).apply {
-            text = yazi; textSize = 11f; minWidth = 0; minimumWidth = 0
-            minHeight = 0; minimumHeight = 0
-            setPadding(22, 6, 22, 6)
+        fun dugme(yazi: String, tik: (TextView) -> Unit) = TextView(this).apply {
+            text = yazi; textSize = 12f
+            setTextColor(Color.WHITE)
+            setPadding(26, 14, 26, 14)
             setOnClickListener { tik(this) }
         }
         bar.addView(dugme("Bölge") { bolgeSec() })
+        bar.addView(dugme("Kutu") { kutuSec() })
         bar.addView(dugme("Duraklat") { b ->
             duraklat = !duraklat
             b.text = if (duraklat) "Devam" else "Duraklat"
@@ -433,11 +444,15 @@ class CaptureService : Service() {
             val klp = kaplamaParam(
                 WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, false
             )
-            klp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            klp.gravity = Gravity.TOP or Gravity.START
             kutu.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
                 kutuAlani = if (v.visibility == View.VISIBLE && v.width > 0) ekranAlani(v) else null
             }
-            wm.addView(kutu, klp)
+            // Sabit alan (kullanıcının çizdiği kutu); yazı içinde ortalanır
+            val kap = FrameLayout(this)
+            kap.addView(kutu, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+            wm.addView(kap, klp)
+            ceviriKap = kap
             ceviriKutusu = kutu
             stilUygula(false)
         }
@@ -460,10 +475,15 @@ class CaptureService : Service() {
         val parlak = Color.luminance(ayar.yaziRengi) > 0.5f
         k.setShadowLayer(4f, 0f, 0f, if (parlak) Color.BLACK else Color.WHITE)
         (k.background as GradientDrawable).setColor(ayar.arkaArgb())
-        k.maxWidth = (genislik * 0.92f).toInt()
-        val lp = k.layoutParams as WindowManager.LayoutParams
-        lp.y = (ayar.konumYuzde / 100f * yukseklik * 0.90f).toInt()
-        try { wm.updateViewLayout(k, lp) } catch (_: Exception) {}
+        k.typeface = YaziTipleri.getir(this, ayar.yaziTipi)
+        val kap = ceviriKap ?: return
+        val o = ayar.kutu
+        val lp = kap.layoutParams as WindowManager.LayoutParams
+        lp.x = (o.left * genislik).toInt()
+        lp.y = (o.top * yukseklik).toInt()
+        lp.width = ((o.right - o.left) * genislik).toInt().coerceAtLeast(80)
+        lp.height = ((o.bottom - o.top) * yukseklik).toInt().coerceAtLeast(40)
+        try { wm.updateViewLayout(kap, lp) } catch (_: Exception) {}
         if (ornekGoster && (k.visibility != View.VISIBLE || ornekGosteriliyor)) {
             ornekGosteriliyor = true
             k.text = "Örnek altyazı metni"
@@ -471,6 +491,43 @@ class CaptureService : Service() {
             ana.removeCallbacks(ornekGizle)
             ana.postDelayed(ornekGizle, 2500)
         }
+        sigdir()
+    }
+
+    /** Yazı kutuya sığmıyorsa sığana kadar küçültür (en çok ayarlanan boyut, en az 8). */
+    private fun sigdir() {
+        val k = ceviriKutusu ?: return
+        val o = ayar.kutu
+        val w = ((o.right - o.left) * genislik).toInt().coerceAtLeast(80) - k.paddingLeft - k.paddingRight
+        val h = ((o.bottom - o.top) * yukseklik).toInt().coerceAtLeast(40) - k.paddingTop - k.paddingBottom
+        val metin = k.text
+        var boyut = ayar.yaziBoyutu
+        if (w > 0 && h > 0 && metin.isNotEmpty()) {
+            val boya = TextPaint(k.paint)
+            while (boyut > 8) {
+                boya.textSize = TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_SP, boyut.toFloat(), resources.displayMetrics
+                )
+                val yerlesim = StaticLayout.Builder.obtain(metin, 0, metin.length, boya, w).build()
+                if (yerlesim.height <= h) break
+                boyut--
+            }
+        }
+        k.maxWidth = w + k.paddingLeft + k.paddingRight
+        k.textSize = boyut.toFloat()
+    }
+
+    private fun kutuSec() {
+        duraklat = true
+        kontrolBar?.visibility = View.GONE
+        ceviriKap?.visibility = View.GONE
+        BolgeSecici(this, wm, ayar.kutu, "Türkçe altyazının görüneceği alanı çiz") { yeni ->
+            if (yeni != null) ayar.kutu = yeni
+            ceviriKap?.visibility = View.VISIBLE
+            kontrolBar?.visibility = View.VISIBLE
+            duraklat = false
+            stilUygula(true)
+        }.goster()
     }
 
     private val ornekGizle = Runnable {
@@ -484,7 +541,7 @@ class CaptureService : Service() {
     private fun bolgeSec() {
         duraklat = true
         kontrolBar?.visibility = View.GONE
-        BolgeSecici(this, wm, ayar.bolge) { yeni ->
+        BolgeSecici(this, wm, ayar.bolge, "İngilizce altyazının çıktığı alanı çiz") { yeni ->
             if (yeni != null) {
                 ayar.bolge = yeni
                 sonGonderilen = ""; aday = ""; adaySayac = 0
@@ -511,7 +568,8 @@ class CaptureService : Service() {
         tanima?.close(); cevirmen?.close()
         tanima = null; cevirmen = null
         kontrolBar?.let { try { wm.removeView(it) } catch (_: Exception) {} }
-        ceviriKutusu?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+        ceviriKap?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+        ceviriKap = null
         kontrolBar = null; ceviriKutusu = null
         kutuAlani = null; barAlani = null
         Durum.stilDinleyici = null

@@ -19,6 +19,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
@@ -213,7 +214,7 @@ class MainActivity : AppCompatActivity() {
             text = "Kullanım:\n1) TV adresini yaz (TV uygulaması açık olmalı).\n" +
                 "2) Başlat → ekran kaydı iznini ver.\n" +
                 "3) Xbox uygulamasında Remote Play'i aç.\n" +
-                "4) Sağ üstteki \"Bölge\" ile altyazı alanını bir kez çiz.\n" +
+                "4) Sağ üstte \"Bölge\" ile İngilizce altyazı alanını, \"Kutu\" ile Türkçe altyazının yerini çiz.\n" +
                 "İlk çalıştırmada çeviri modeli (~30 MB) iner; sonra internetsiz çalışır."
             alpha = 0.75f
             textSize = 13f
@@ -264,12 +265,36 @@ class MainActivity : AppCompatActivity() {
         fun yenile(bildir: Boolean = true) {
             onizleme.textSize = ayar.yaziBoyutu.toFloat()
             onizleme.setTextColor(ayar.yaziRengi)
+            onizleme.typeface = YaziTipleri.getir(this, ayar.yaziTipi)
             (onizleme.background as GradientDrawable).setColor(ayar.arkaArgb())
             if (bildir) Durum.stilDinleyici?.invoke()
         }
         b.addView(cerceve, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
-        b.addView(kaydirici("Yazı boyutu", 12, 44, ayar.yaziBoyutu) { ayar.yaziBoyutu = it; yenile() })
-        b.addView(kaydirici("Konum (0 = üst, 100 = alt)", 0, 100, ayar.konumYuzde) { ayar.konumYuzde = it; yenile() })
+        b.addView(kaydirici("Yazı boyutu (en çok)", 12, 44, ayar.yaziBoyutu) { ayar.yaziBoyutu = it; yenile() })
+        b.addView(etiket("Yazı tipi"))
+        val tipSatir = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        YaziTipleri.liste.forEach { (id, ad) ->
+            tipSatir.addView(Button(this).apply {
+                text = ad
+                isAllCaps = false
+                typeface = YaziTipleri.getir(this@MainActivity, id)
+                alpha = if (ayar.yaziTipi == id) 1f else 0.55f
+                setOnClickListener {
+                    ayar.yaziTipi = id
+                    for (i in 0 until tipSatir.childCount) tipSatir.getChildAt(i).alpha = 0.55f
+                    alpha = 1f
+                    yenile()
+                }
+            })
+        }
+        b.addView(HorizontalScrollView(this).apply { addView(tipSatir) })
+        b.addView(TextView(this).apply {
+            text = "Yer ve genişlik: uygulama çalışırken sağ üstteki \"Kutu\" ile Türkçe altyazının " +
+                "görüneceği alanı çiz. Yazı sığmazsa kendiliğinden küçülür; yazı boyutu en büyük değerdir."
+            textSize = 13f
+            alpha = 0.75f
+            setPadding(0, dp(8), 0, 0)
+        })
         b.addView(renkSatiri("Yazı rengi", yaziRenkleri, ayar.yaziRengi) { ayar.yaziRengi = it; yenile() })
         b.addView(renkSatiri("Arka plan rengi", arkaRenkleri, ayar.arkaRengi) { ayar.arkaRengi = it; yenile() })
         b.addView(kaydirici("Arka plan opaklığı (0 = tam şeffaf)", 0, 100, ayar.arkaOpaklik) { ayar.arkaOpaklik = it; yenile() })

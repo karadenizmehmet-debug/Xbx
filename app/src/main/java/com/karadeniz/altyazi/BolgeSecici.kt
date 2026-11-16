@@ -24,6 +24,7 @@ class BolgeSecici(
     private val ctx: Context,
     private val wm: WindowManager,
     baslangic: RectF,
+    private val baslikYazi: String,
     private val bitti: (RectF?) -> Unit
 ) {
     private val kok = FrameLayout(ctx)
@@ -39,7 +40,7 @@ class BolgeSecici(
             setPadding(24, 12, 24, 12)
         }
         ust.addView(TextView(ctx).apply {
-            text = "Altyazının çıktığı alanı parmağınla çiz  "
+            text = "$baslikYazi  "
             setTextColor(Color.WHITE)
             textSize = 14f
         })
