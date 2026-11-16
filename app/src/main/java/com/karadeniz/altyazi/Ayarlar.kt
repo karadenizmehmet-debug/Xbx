@@ -1,6 +1,7 @@
 package com.karadeniz.altyazi
 
 import android.content.Context
+import android.graphics.Color
 import android.graphics.RectF
 
 /** Uygulama ayarları (SharedPreferences). Bölge, ekranın oranı olarak (0..1) saklanır. */
@@ -19,6 +20,33 @@ class Ayarlar(context: Context) {
     var cevrimici: Boolean
         get() = p.getBoolean("cevrimici", true)
         set(v) = p.edit().putBoolean("cevrimici", v).apply()
+
+    // --- Altyazı görünümü ---
+    var yaziBoyutu: Int
+        get() = p.getInt("yaziBoyutu", 18)
+        set(v) = p.edit().putInt("yaziBoyutu", v).apply()
+
+    /** Dikey konum: 0 = en üst, 100 = en alt. */
+    var konumYuzde: Int
+        get() = p.getInt("konum", 6)
+        set(v) = p.edit().putInt("konum", v).apply()
+
+    var yaziRengi: Int
+        get() = p.getInt("yaziRengi", Color.WHITE)
+        set(v) = p.edit().putInt("yaziRengi", v).apply()
+
+    var arkaRengi: Int
+        get() = p.getInt("arkaRengi", Color.BLACK)
+        set(v) = p.edit().putInt("arkaRengi", v).apply()
+
+    /** Arka plan opaklığı: 0 = tam şeffaf, 100 = tam dolu. */
+    var arkaOpaklik: Int
+        get() = p.getInt("arkaOpaklik", 60)
+        set(v) = p.edit().putInt("arkaOpaklik", v).apply()
+
+    fun arkaArgb(): Int = Color.argb(
+        arkaOpaklik * 255 / 100, Color.red(arkaRengi), Color.green(arkaRengi), Color.blue(arkaRengi)
+    )
 
     var geceModu: Boolean
         get() = p.getBoolean("gece", true)
@@ -45,5 +73,7 @@ class Ayarlar(context: Context) {
 object Durum {
     @Volatile var calisiyor = false
     var dinleyici: ((String) -> Unit)? = null
+    /** Görünüm ayarı değişti: servis kaplamayı yeniden biçimlendirir. */
+    var stilDinleyici: (() -> Unit)? = null
     var sonCeviriDinleyici: ((String, String) -> Unit)? = null
 }

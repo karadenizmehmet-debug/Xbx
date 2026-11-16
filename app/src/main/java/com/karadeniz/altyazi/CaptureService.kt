@@ -195,6 +195,7 @@ class CaptureService : Service() {
         val eskiG = genislik; val eskiY = yukseklik
         olculeriAl()
         if (eskiG == genislik && eskiY == yukseklik) return
+        stilUygula(false)
         isciH?.post {
             val yeni = ImageReader.newInstance(genislik, yukseklik, PixelFormat.RGBA_8888, 2)
             vd.resize(genislik, yukseklik, dpi)
@@ -241,6 +242,7 @@ class CaptureService : Service() {
                 (o.bottom * h).toInt().coerceIn(1, h)
             )
             if (rect.width() < 8 || rect.height() < 8) { tam.recycle(); return }
+            kirpX = rect.left; kirpY = rect.top
             kirpik = Bitmap.createBitmap(tam, rect.left, rect.top, rect.width(), rect.height())
             if (kirpik !== tam) tam.recycle()
         } finally {
@@ -262,6 +264,11 @@ class CaptureService : Service() {
 
     private val isciExec = java.util.concurrent.Executor { komut -> isciH?.post(komut) }
     @Volatile private var cevirmeBekliyor = false
+    private var kirpX = 0
+    private var kirpY = 0
+    @Volatile private var kutuAlani: Rect? = null     // çeviri kutusunun ekrandaki yeri
+    @Volatile private var barAlani: Rect? = null      // kontrol çubuğunun ekrandaki yeri
+    private var ornekGosteriliyor = false
 
     private fun normalize(s: String) = s.lowercase().replace(Regex("[^\\p{L}\\p{N}]"), "")
 
@@ -317,8 +324,15 @@ class CaptureService : Service() {
      * (Remote Play'in dokunmatik A/B/X/Y düğmeleri "A" okunup "bir" diye çevriliyordu.)
      */
     private fun temizle(sonuc: Text): String {
+        val kutu = kutuAlani; val bar = barAlani
         val satirlar = sonuc.textBlocks.flatMap { it.lines }
             .filter { s -> s.text.count { it.isLetter() } >= 2 }
+            .filter { s ->
+                // Kendi kaplamalarımızın üstündeki yazıyı okuma
+                val k = s.boundingBox ?: return@filter true
+                val x = k.centerX() + kirpX; val y = k.centerY() + kirpY
+                !(kutu?.contains(x, y) == true || bar?.contains(x, y) == true)
+            }
         val parcalar = satirlar.joinToString(" ") { it.text }
             .replace(Regex("\\s+"), " ").trim()
             .split(" ").filter { it.isNotEmpty() }.toMutableList()
@@ -334,8 +348,10 @@ class CaptureService : Service() {
         if (adres.isNotBlank()) tv.gonder(adres, tr, orijinal)
         ana.post {
             ceviriKutusu?.let {
+                ornekGosteriliyor = false
                 it.text = tr
-                it.visibility = if (tr.isBlank()) View.GONE else View.VISIBLE
+                if (tr.isBlank()) { it.visibility = View.GONE; kutuAlani = null }
+                else it.visibility = View.VISIBLE
             }
             Durum.sonCeviriDinleyici?.invoke(orijinal, tr)
         }
@@ -362,9 +378,10 @@ class CaptureService : Service() {
     // ---------- Telefon kaplamaları ----------
 
     private fun kaplamaParam(w: Int, h: Int, dokunulabilir: Boolean): WindowManager.LayoutParams {
+        // FLAG_SECURE yok: ekran görüntüsü alınabilsin. Kendi yazımızı okumamak için
+        // kaplamaların üstüne düşen OCR satırları temizle() içinde atılır.
         var bayrak = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-            WindowManager.LayoutParams.FLAG_SECURE   // ekran yakalamada görünmesin (OCR döngüsü olmasın)
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
         if (!dokunulabilir) bayrak = bayrak or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
         return WindowManager.LayoutParams(
             w, h, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, bayrak, PixelFormat.TRANSLUCENT
@@ -414,12 +431,53 @@ class CaptureService : Service() {
                 visibility = View.GONE
             }
             val klp = kaplamaParam(
-                WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT, false
+                WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, false
             )
             klp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            klp.y = 90
+            kutu.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+                kutuAlani = if (v.visibility == View.VISIBLE && v.width > 0) ekranAlani(v) else null
+            }
             wm.addView(kutu, klp)
             ceviriKutusu = kutu
+            stilUygula(false)
+        }
+        bar.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+            barAlani = if (v.visibility == View.VISIBLE && v.width > 0) ekranAlani(v) else null
+        }
+        Durum.stilDinleyici = { ana.post { stilUygula(true) } }
+    }
+
+    private fun ekranAlani(v: View): Rect {
+        val k = IntArray(2); v.getLocationOnScreen(k)
+        return Rect(k[0], k[1], k[0] + v.width, k[1] + v.height)
+    }
+
+    /** Boyut, konum, renk ve şeffaflık ayarlarını çeviri kutusuna uygular. */
+    private fun stilUygula(ornekGoster: Boolean) {
+        val k = ceviriKutusu ?: return
+        k.textSize = ayar.yaziBoyutu.toFloat()
+        k.setTextColor(ayar.yaziRengi)
+        val parlak = Color.luminance(ayar.yaziRengi) > 0.5f
+        k.setShadowLayer(4f, 0f, 0f, if (parlak) Color.BLACK else Color.WHITE)
+        (k.background as GradientDrawable).setColor(ayar.arkaArgb())
+        k.maxWidth = (genislik * 0.92f).toInt()
+        val lp = k.layoutParams as WindowManager.LayoutParams
+        lp.y = (ayar.konumYuzde / 100f * yukseklik * 0.90f).toInt()
+        try { wm.updateViewLayout(k, lp) } catch (_: Exception) {}
+        if (ornekGoster && (k.visibility != View.VISIBLE || ornekGosteriliyor)) {
+            ornekGosteriliyor = true
+            k.text = "Örnek altyazı metni"
+            k.visibility = View.VISIBLE
+            ana.removeCallbacks(ornekGizle)
+            ana.postDelayed(ornekGizle, 2500)
+        }
+    }
+
+    private val ornekGizle = Runnable {
+        if (ornekGosteriliyor) {
+            ornekGosteriliyor = false
+            ceviriKutusu?.visibility = View.GONE
+            kutuAlani = null
         }
     }
 
@@ -455,6 +513,9 @@ class CaptureService : Service() {
         kontrolBar?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         ceviriKutusu?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         kontrolBar = null; ceviriKutusu = null
+        kutuAlani = null; barAlani = null
+        Durum.stilDinleyici = null
+        ana.removeCallbacks(ornekGizle)
         isci?.quitSafely(); isci = null; isciH = null
         durum("Durduruldu.")
         stopForeground(STOP_FOREGROUND_REMOVE)

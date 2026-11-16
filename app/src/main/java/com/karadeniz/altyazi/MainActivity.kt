@@ -3,7 +3,9 @@ package com.karadeniz.altyazi
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
@@ -16,8 +18,10 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -168,6 +172,8 @@ class MainActivity : AppCompatActivity() {
             setPadding(0, dp(4), 0, dp(4))
         })
 
+        kok.addView(gorunumBolumu())
+
         kok.addView(etiket("Okuma aralığı"))
         val aralikSatir = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         listOf(300L to "Hızlı", 450L to "Normal", 800L to "Pil dostu").forEach { (ms, ad) ->
@@ -222,6 +228,99 @@ class MainActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(-1, -2))
 
         return ScrollView(this).apply { addView(kok) }
+    }
+
+    private val yaziRenkleri = intArrayOf(
+        Color.WHITE, Color.rgb(255, 235, 59), Color.rgb(129, 212, 250),
+        Color.rgb(165, 214, 167), Color.rgb(255, 183, 77), Color.rgb(244, 143, 177), Color.BLACK
+    )
+    private val arkaRenkleri = intArrayOf(
+        Color.BLACK, Color.rgb(66, 66, 66), Color.rgb(13, 30, 80),
+        Color.rgb(90, 20, 20), Color.rgb(20, 70, 40), Color.WHITE
+    )
+
+    /** Altyazı görünümü: boyut, konum, yazı rengi, arka plan rengi ve şeffaflığı. */
+    private fun gorunumBolumu(): View {
+        val b = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(12), 0, dp(6))
+        }
+        b.addView(TextView(this).apply {
+            text = "Altyazı görünümü"
+            textSize = 16f
+            setTypeface(typeface, Typeface.BOLD)
+        })
+        val onizleme = TextView(this).apply {
+            text = "Örnek altyazı metni"
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(6), dp(12), dp(6))
+            background = GradientDrawable().apply { cornerRadius = dp(8).toFloat() }
+        }
+        val cerceve = FrameLayout(this).apply {
+            setBackgroundColor(Color.rgb(84, 110, 122))
+            setPadding(dp(8), dp(16), dp(8), dp(16))
+            addView(onizleme, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        }
+        fun yenile(bildir: Boolean = true) {
+            onizleme.textSize = ayar.yaziBoyutu.toFloat()
+            onizleme.setTextColor(ayar.yaziRengi)
+            (onizleme.background as GradientDrawable).setColor(ayar.arkaArgb())
+            if (bildir) Durum.stilDinleyici?.invoke()
+        }
+        b.addView(cerceve, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
+        b.addView(kaydirici("Yazı boyutu", 12, 44, ayar.yaziBoyutu) { ayar.yaziBoyutu = it; yenile() })
+        b.addView(kaydirici("Konum (0 = üst, 100 = alt)", 0, 100, ayar.konumYuzde) { ayar.konumYuzde = it; yenile() })
+        b.addView(renkSatiri("Yazı rengi", yaziRenkleri, ayar.yaziRengi) { ayar.yaziRengi = it; yenile() })
+        b.addView(renkSatiri("Arka plan rengi", arkaRenkleri, ayar.arkaRengi) { ayar.arkaRengi = it; yenile() })
+        b.addView(kaydirici("Arka plan opaklığı (0 = tam şeffaf)", 0, 100, ayar.arkaOpaklik) { ayar.arkaOpaklik = it; yenile() })
+        yenile(false)
+        return b
+    }
+
+    private fun kaydirici(ad: String, enAz: Int, enCok: Int, deger: Int, degisti: (Int) -> Unit): View {
+        val kutu = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val yazi = etiket("$ad: $deger")
+        kutu.addView(yazi)
+        kutu.addView(SeekBar(this).apply {
+            min = enAz; max = enCok; progress = deger
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, v: Int, kullanici: Boolean) {
+                    yazi.text = "$ad: $v"
+                    if (kullanici) degisti(v)
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
+        })
+        return kutu
+    }
+
+    private fun renkSatiri(ad: String, renkler: IntArray, secili: Int, degisti: (Int) -> Unit): View {
+        val kutu = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        kutu.addView(etiket(ad))
+        val satir = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(4), 0, dp(2))
+        }
+        fun ciz(v: View, renk: Int, sec: Boolean) {
+            v.background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(renk)
+                setStroke(dp(if (sec) 4 else 1), if (sec) Color.rgb(30, 111, 217) else Color.GRAY)
+            }
+        }
+        renkler.forEach { renk ->
+            val nokta = View(this)
+            ciz(nokta, renk, renk == secili)
+            nokta.setOnClickListener {
+                for (i in 0 until satir.childCount) ciz(satir.getChildAt(i), renkler[i], false)
+                ciz(nokta, renk, true)
+                degisti(renk)
+            }
+            satir.addView(nokta, LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(10) })
+        }
+        kutu.addView(satir)
+        return kutu
     }
 
     private fun etiket(s: String) = TextView(this).apply {
