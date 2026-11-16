@@ -161,6 +161,13 @@ class MainActivity : AppCompatActivity() {
             setPadding(0, dp(10), 0, dp(4))
         })
 
+        kok.addView(MaterialSwitch(this).apply {
+            text = "Çevrimiçi çeviri (daha doğal, internet gerekir)"
+            isChecked = ayar.cevrimici
+            setOnCheckedChangeListener { _, b -> ayar.cevrimici = b }
+            setPadding(0, dp(4), 0, dp(4))
+        })
+
         kok.addView(etiket("Okuma aralığı"))
         val aralikSatir = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         listOf(300L to "Hızlı", 450L to "Normal", 800L to "Pil dostu").forEach { (ms, ad) ->

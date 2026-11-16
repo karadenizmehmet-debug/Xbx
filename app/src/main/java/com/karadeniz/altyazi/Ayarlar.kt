@@ -15,6 +15,11 @@ class Ayarlar(context: Context) {
         get() = p.getBoolean("telefonda", true)
         set(v) = p.edit().putBoolean("telefonda", v).apply()
 
+    /** Çevrimiçi Google çevirisi (daha doğal). Kapalıysa cihazdaki ML Kit kullanılır. */
+    var cevrimici: Boolean
+        get() = p.getBoolean("cevrimici", true)
+        set(v) = p.edit().putBoolean("cevrimici", v).apply()
+
     var geceModu: Boolean
         get() = p.getBoolean("gece", true)
         set(v) = p.edit().putBoolean("gece", v).apply()

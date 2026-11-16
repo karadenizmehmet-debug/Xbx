@@ -37,6 +37,7 @@ import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.Translator
 import com.google.mlkit.nl.translate.TranslatorOptions
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -74,6 +75,8 @@ class CaptureService : Service() {
     private var cevirmen: Translator? = null
     private var modelHazir = false
     private val tv = TvGonderici()
+    private val cevrimici = CevrimiciCeviri()
+    private val agIsi = java.util.concurrent.Executors.newSingleThreadExecutor()
 
     @Volatile private var mesgul = false
     @Volatile private var duraklat = false
@@ -247,9 +250,7 @@ class CaptureService : Service() {
         mesgul = true
         tanima!!.process(InputImage.fromBitmap(kirpik, 0))
             .addOnSuccessListener(isciExec) { sonuc ->
-                val metin = sonuc.textBlocks.joinToString(" ") { blok ->
-                    blok.lines.joinToString(" ") { it.text }
-                }.replace(Regex("\\s+"), " ").trim()
+                val metin = temizle(sonuc)
                 metinGeldi(metin)
                 kirpik.recycle()
                 if (!cevirmeBekliyor) mesgul = false
@@ -286,15 +287,46 @@ class CaptureService : Service() {
         sonGonderilen = n
         aday = ""; adaySayac = 0
         cevirmeBekliyor = true
-        cevirmen!!.translate(metin)
-            .addOnSuccessListener(isciExec) { tr ->
-                ekrandaMetinVar = true
-                yayinla(tr, metin)
-                cevirmeBekliyor = false; mesgul = false
+        if (ayar.cevrimici) {
+            agIsi.execute {
+                val tr = try { cevrimici.cevir(metin) } catch (_: Exception) { null }
+                isciH?.post {
+                    if (tr.isNullOrBlank()) yerelCevir(metin) else ceviriBitti(tr, metin)
+                } ?: run { cevirmeBekliyor = false; mesgul = false }
             }
-            .addOnFailureListener(isciExec) {
-                cevirmeBekliyor = false; mesgul = false
-            }
+        } else yerelCevir(metin)
+    }
+
+    private fun ceviriBitti(tr: String, orijinal: String) {
+        ekrandaMetinVar = true
+        yayinla(tr, orijinal)
+        cevirmeBekliyor = false; mesgul = false
+    }
+
+    /** Cihazdaki ML Kit çevirisi (internetsiz; çevrimiçi başarısız olursa yedek). */
+    private fun yerelCevir(metin: String) {
+        val c = cevirmen
+        if (c == null) { cevirmeBekliyor = false; mesgul = false; return }
+        c.translate(metin)
+            .addOnSuccessListener(isciExec) { tr -> ceviriBitti(tr, metin) }
+            .addOnFailureListener(isciExec) { cevirmeBekliyor = false; mesgul = false }
+    }
+
+    /**
+     * OCR sonucunu temizler: altyazı olmayan tek harflik parçaları atar.
+     * (Remote Play'in dokunmatik A/B/X/Y düğmeleri "A" okunup "bir" diye çevriliyordu.)
+     */
+    private fun temizle(sonuc: Text): String {
+        val satirlar = sonuc.textBlocks.flatMap { it.lines }
+            .filter { s -> s.text.count { it.isLetter() } >= 2 }
+        val parcalar = satirlar.joinToString(" ") { it.text }
+            .replace(Regex("\\s+"), " ").trim()
+            .split(" ").filter { it.isNotEmpty() }.toMutableList()
+        fun artik(t: String) = t.length == 1 && t[0].isLetterOrDigit() && t != "I"
+        while (parcalar.isNotEmpty() && artik(parcalar.last())) parcalar.removeAt(parcalar.size - 1)
+        while (parcalar.isNotEmpty() && parcalar.first().length == 1 && parcalar.first()[0] in "BXYbxy")
+            parcalar.removeAt(0)
+        return parcalar.joinToString(" ")
     }
 
     private fun yayinla(tr: String, orijinal: String) {
@@ -432,6 +464,7 @@ class CaptureService : Service() {
     override fun onDestroy() {
         if (Durum.calisiyor) durdur()
         tv.kapat()
+        agIsi.shutdown()
         super.onDestroy()
     }
 }
