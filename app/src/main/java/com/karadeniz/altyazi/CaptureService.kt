@@ -1,6 +1,5 @@
 package com.karadeniz.altyazi
 
-import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -8,7 +7,6 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
 import android.graphics.Bitmap
@@ -21,10 +19,6 @@ import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
-import android.media.AudioAttributes
-import android.media.AudioFormat
-import android.media.AudioPlaybackCaptureConfiguration
-import android.media.AudioRecord
 import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
@@ -43,7 +37,6 @@ import android.util.TypedValue
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
@@ -470,7 +463,6 @@ class CaptureService : Service() {
             b.text = if (duraklat) "Devam" else "Duraklat"
             durum(if (duraklat) "Duraklatıldı" else "Çalışıyor")
         })
-        bar.addView(dugme("Ses") { sesTesti() })
         bar.addView(dugme("Durdur") { durdur() })
         val lp = kaplamaParam(
             WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, true
@@ -632,93 +624,6 @@ class CaptureService : Service() {
             duraklat = false
             stilUygula(false)
         }.goster()
-    }
-
-    // ---------- Ses yakalama testi ----------
-
-    @Volatile private var sesTestiVar = false
-
-    /**
-     * Xbox uygulamasının (Remote Play) sesi bu telefondan yakalanabiliyor mu?
-     * AudioPlaybackCapture ile 5 sn dinler; tepe ve ortalama seviyeyi bildirir.
-     * Seviye 0 ise: ya ses çalmıyordu ya da Xbox uygulaması yakalamaya izin vermiyor.
-     */
-    private fun sesTesti() {
-        val mp = projeksiyon ?: return
-        if (sesTestiVar) return
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            bildir("Ses testi: mikrofon izni yok. Uygulama ayarlarından ver.")
-            return
-        }
-        sesTestiVar = true
-        bildir("Ses testi 5 sn: şimdi Xbox'ta ses çalsın.")
-        Thread {
-            var kayit: AudioRecord? = null
-            try {
-                val cfg = AudioPlaybackCaptureConfiguration.Builder(mp)
-                    .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
-                    .addMatchingUsage(AudioAttributes.USAGE_GAME)
-                    .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
-                    .build()
-                val hz = 44100
-                val fmt = AudioFormat.Builder()
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .setSampleRate(hz)
-                    .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
-                    .build()
-                val min = AudioRecord.getMinBufferSize(
-                    hz, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
-                )
-                kayit = AudioRecord.Builder()
-                    .setAudioFormat(fmt)
-                    .setBufferSizeInBytes(maxOf(min, hz))
-                    .setAudioPlaybackCaptureConfig(cfg)
-                    .build()
-                if (kayit.state != AudioRecord.STATE_INITIALIZED) {
-                    bildir("Ses testi: yakalama başlatılamadı.")
-                    return@Thread
-                }
-                kayit.startRecording()
-                val tampon = ShortArray(hz / 10)           // 100 ms
-                val bitis = System.currentTimeMillis() + 5000
-                var tepe = 0
-                var kareToplam = 0.0
-                var ornek = 0L
-                var sesliParca = 0
-                var parca = 0
-                while (System.currentTimeMillis() < bitis && Durum.calisiyor) {
-                    val n = kayit.read(tampon, 0, tampon.size)
-                    if (n <= 0) break
-                    var parcaTepe = 0
-                    for (i in 0 until n) {
-                        val v = kotlin.math.abs(tampon[i].toInt())
-                        if (v > parcaTepe) parcaTepe = v
-                        kareToplam += v.toDouble() * v
-                    }
-                    ornek += n
-                    parca++
-                    if (parcaTepe > 300) sesliParca++
-                    if (parcaTepe > tepe) tepe = parcaTepe
-                }
-                val rms = if (ornek > 0) Math.sqrt(kareToplam / ornek).toInt() else 0
-                val sonuc = if (tepe > 300)
-                    "SES VAR ✓  tepe=$tepe ortalama=$rms  sesli=%${if (parca > 0) sesliParca * 100 / parca else 0}"
-                else
-                    "SES YOK ✗  tepe=$tepe. Ses çalıyordu ise Xbox uygulaması yakalamaya izin vermiyor."
-                bildir("Ses testi: $sonuc")
-            } catch (e: Exception) {
-                bildir("Ses testi hatası: ${e.javaClass.simpleName}: ${e.message}")
-            } finally {
-                try { kayit?.stop() } catch (_: Exception) {}
-                try { kayit?.release() } catch (_: Exception) {}
-                sesTestiVar = false
-            }
-        }.start()
-    }
-
-    private fun bildir(s: String) = ana.post {
-        Toast.makeText(this, s, Toast.LENGTH_LONG).show()
-        Durum.dinleyici?.invoke(s)
     }
 
     // ---------- Kapatma ----------

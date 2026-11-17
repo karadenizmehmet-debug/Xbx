@@ -3,9 +3,11 @@ package com.karadeniz.altyazi
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
@@ -14,28 +16,38 @@ import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup
-import android.widget.Button
 import android.widget.EditText
-import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
+import android.widget.FrameLayout
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.slider.Slider
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
+import com.google.android.material.R as MR
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var ayar: Ayarlar
     private lateinit var durumYazi: TextView
+    private lateinit var durumNokta: View
     private lateinit var sonYazi: TextView
+    private lateinit var tvSonuc: TextView
     private lateinit var baslatDugme: MaterialButton
     private lateinit var tvAlan: EditText
     private val tv = TvGonderici()
@@ -58,11 +70,6 @@ class MainActivity : AppCompatActivity() {
 
     private val bildirimIzni = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { sesIzniIste() }
-
-    // Reddedilirse de devam: OCR çalışır, yalnızca ses yakalama olmaz.
-    private val sesIzni = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
     ) { ekranIzniIste() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -71,6 +78,7 @@ class MainActivity : AppCompatActivity() {
             if (ayar.geceModu) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
         )
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(arayuz())
     }
 
@@ -78,7 +86,8 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         Durum.dinleyici = { s -> durumYazi.text = s; dugmeyiGuncelle() }
         Durum.sonCeviriDinleyici = { org, tr ->
-            sonYazi.text = if (tr.isBlank()) "(altyazı yok)" else "EN: $org\nTR: $tr"
+            sonYazi.text = if (tr.isBlank()) "(altyazı yok)" else "EN  $org\nTR  $tr"
+            sonYazi.visibility = View.VISIBLE
         }
         dugmeyiGuncelle()
     }
@@ -94,173 +103,272 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
+    // ---------- Küçük yardımcılar ----------
+
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    private fun renk(attr: Int): Int = MaterialColors.getColor(this, attr, Color.MAGENTA)
+
+    private fun yuvarlak(renk: Int, yaricap: Int): GradientDrawable =
+        GradientDrawable().apply { cornerRadius = dp(yaricap).toFloat(); setColor(renk) }
+
+    private fun yazi(s: String, sp: Float = 14f, kalin: Boolean = false, soluk: Boolean = false) =
+        TextView(this).apply {
+            text = s
+            textSize = sp
+            setTextColor(renk(if (soluk) MR.attr.colorOnSurfaceVariant else MR.attr.colorOnSurface))
+            if (kalin) setTypeface(typeface, Typeface.BOLD)
+        }
+
+    private fun ust(v: View, dpUst: Int): View {
+        v.layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(dpUst) }
+        return v
+    }
+
+    /** Yuvarlak köşeli, ince çerçeveli kart. */
+    private fun kart(arka: Int, vararg icerik: View): View {
+        val ic = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(16), dp(18), dp(18))
+        }
+        icerik.forEach { ic.addView(it) }
+        return MaterialCardView(this).apply {
+            radius = dp(24).toFloat()
+            cardElevation = 0f
+            setCardBackgroundColor(arka)
+            strokeWidth = dp(1)
+            strokeColor = renk(MR.attr.colorOutlineVariant)
+            addView(ic)
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) }
+        }
+    }
+
+    private fun yuzey() = renk(MR.attr.colorSurface)
+
+    private fun baslik(ad: String, alt: String? = null): View =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(yazi(ad, 17f, kalin = true))
+            if (alt != null) addView(yazi(alt, 13f, soluk = true).apply { setPadding(0, dp(2), 0, 0) })
+            setPadding(0, 0, 0, dp(10))
+        }
+
+    private fun etiket(s: String) = yazi(s, 13f, soluk = true).apply { setPadding(0, dp(14), 0, dp(6)) }
+
+    // ---------- Ekran ----------
 
     private fun arayuz(): View {
         val kok = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(12), dp(18), dp(18))
+            setPadding(dp(16), dp(8), dp(16), dp(24))
         }
+        kok.addView(ustBaslik())
+        kok.addView(
+            yazi("Xbox Remote Play görüntüsündeki İngilizce altyazıyı okur, Türkçeye çevirir ve TV'ye gönderir.", 14f, soluk = true)
+                .apply { setPadding(dp(4), dp(2), dp(4), dp(16)) }
+        )
+        kok.addView(durumKarti())
+        kok.addView(tvKarti())
+        kok.addView(secenekKarti())
+        kok.addView(gorunumKarti())
+        kok.addView(aralikKarti())
+        kok.addView(kullanimKarti())
+        kok.addView(
+            yazi("© Mehmet Karadeniz, 2026-2027", 12f, soluk = true).apply {
+                gravity = Gravity.CENTER
+                alpha = 0.7f
+                setPadding(0, dp(8), 0, 0)
+            }
+        )
+        return ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+            clipToPadding = false
+            setBackgroundColor(renk(android.R.attr.colorBackground))
+            addView(kok)
+            ViewCompat.setOnApplyWindowInsetsListener(this) { v, ins ->
+                val b = ins.getInsets(
+                    WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+                )
+                v.setPadding(b.left, b.top, b.right, b.bottom)
+                ins
+            }
+        }
+    }
 
-        // Üst başlık: ad + sürüm, gece/gündüz, paylaş
-        val baslik = LinearLayout(this).apply {
+    /** Üst başlık: ad + sürüm, gece/gündüz, paylaş. */
+    private fun ustBaslik(): View {
+        val satir = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), dp(4), 0, dp(4))
         }
-        baslik.addView(TextView(this).apply {
-            text = "Altyazı"
-            textSize = 24f
-            setTypeface(typeface, Typeface.BOLD)
-        })
-        baslik.addView(TextView(this).apply {
-            text = "  v${BuildConfig.VERSION_NAME}"
-            textSize = 13f
-            alpha = 0.7f
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        baslik.addView(Button(this, null, android.R.attr.borderlessButtonStyle).apply {
-            text = if (ayar.geceModu) "☀" else "☾"
-            textSize = 18f
-            contentDescription = "Gece/gündüz modu"
-            setOnClickListener {
+        satir.addView(yazi("Altyazı", 28f, kalin = true))
+        satir.addView(
+            yazi("v${BuildConfig.VERSION_NAME}", 12f).apply {
+                background = yuvarlak(renk(MR.attr.colorSecondaryContainer), 12)
+                setTextColor(renk(MR.attr.colorOnSecondaryContainer))
+                setPadding(dp(10), dp(3), dp(10), dp(3))
+            },
+            LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(10) }
+        )
+        satir.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        satir.addView(
+            ikonDugme(
+                if (ayar.geceModu) R.drawable.ic_gunduz else R.drawable.ic_gece,
+                if (ayar.geceModu) "Gündüz moduna geç" else "Gece moduna geç"
+            ) {
                 ayar.geceModu = !ayar.geceModu
                 AppCompatDelegate.setDefaultNightMode(
                     if (ayar.geceModu) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
                 )
-            }
-        })
-        baslik.addView(Button(this, null, android.R.attr.borderlessButtonStyle).apply {
-            text = "⇪"
-            textSize = 18f
-            contentDescription = "Paylaş"
-            setOnClickListener { paylas() }
-        })
-        kok.addView(baslik)
+            },
+            LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginEnd = dp(8) }
+        )
+        satir.addView(
+            ikonDugme(R.drawable.ic_paylas, "Paylaş") { paylas() },
+            LinearLayout.LayoutParams(dp(44), dp(44))
+        )
+        return satir
+    }
 
-        kok.addView(TextView(this).apply {
-            text = "Xbox Remote Play görüntüsündeki İngilizce altyazıyı okur, Türkçeye çevirir ve TV'ye gönderir."
-            alpha = 0.8f
-            setPadding(0, dp(4), 0, dp(14))
-        })
+    private fun ikonDugme(ikon: Int, aciklama: String, tik: () -> Unit) = ImageButton(this).apply {
+        setImageResource(ikon)
+        imageTintList = ColorStateList.valueOf(renk(MR.attr.colorOnSurfaceVariant))
+        contentDescription = aciklama
+        scaleType = android.widget.ImageView.ScaleType.CENTER
+        background = RippleDrawable(
+            ColorStateList.valueOf(Color.argb(50, 128, 128, 128)),
+            GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(renk(MR.attr.colorSurfaceVariant)) },
+            null
+        )
+        setOnClickListener { tik() }
+    }
 
-        // TV adresi
-        kok.addView(etiket("TV adresi (IP veya IP:port)"))
-        tvAlan = EditText(this).apply {
+    /** Büyük başlat/durdur düğmesi, durum satırı ve son çeviri. */
+    private fun durumKarti(): View {
+        val yaziRengi = renk(MR.attr.colorOnPrimaryContainer)
+        durumNokta = View(this)
+        durumYazi = yazi("Hazır.", 15f, kalin = true).apply { setTextColor(yaziRengi) }
+        val durumSatiri = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(durumNokta, LinearLayout.LayoutParams(dp(10), dp(10)).apply { marginEnd = dp(10) })
+            addView(durumYazi, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        baslatDugme = MaterialButton(this).apply {
+            textSize = 17f
+            isAllCaps = false
+            cornerRadius = dp(18)
+            insetTop = 0
+            insetBottom = 0
+            setOnClickListener { baslatDurdur() }
+        }
+        baslatDugme.layoutParams = LinearLayout.LayoutParams(-1, dp(56)).apply { topMargin = dp(14) }
+        sonYazi = yazi("", 14f).apply {
+            setTextColor(yaziRengi)
+            visibility = View.GONE
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = yuvarlak(ColorUtils.setAlphaComponent(renk(MR.attr.colorSurface), 170), 14)
+        }
+        return kart(renk(MR.attr.colorPrimaryContainer), durumSatiri, baslatDugme, ust(sonYazi, 12))
+    }
+
+    private fun tvKarti(): View {
+        val giris = TextInputLayout(this).apply {
+            hint = "TV adresi (IP veya IP:port)"
+            helperText = "Boş bırakırsan yalnızca telefonda gösterilir"
+            val r = dp(14).toFloat()
+            setBoxCornerRadii(r, r, r, r)
+        }
+        tvAlan = TextInputEditText(giris.context).apply {
             setText(ayar.tvAdresi)
-            hint = "örn. 192.168.1.50  (boş = sadece telefonda göster)"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             isSingleLine = true
         }
-        kok.addView(tvAlan)
-        kok.addView(Button(this).apply {
+        giris.addView(tvAlan)
+
+        val test = MaterialButton(this).apply {
             text = "TV'ye test altyazısı gönder"
+            isAllCaps = false
+            cornerRadius = dp(14)
+            backgroundTintList = ColorStateList.valueOf(renk(MR.attr.colorSecondaryContainer))
+            setTextColor(renk(MR.attr.colorOnSecondaryContainer))
             setOnClickListener {
                 ayar.tvAdresi = tvAlan.text.toString()
                 if (ayar.tvAdresi.isBlank()) { kisa("Önce TV adresini yaz."); return@setOnClickListener }
-                durumYazi.text = "Test gönderiliyor…"
+                tvSonuc.text = "Test gönderiliyor…"
+                tvSonuc.visibility = View.VISIBLE
                 tv.gonder(
                     ayar.tvAdresi, "Test altyazı: Merhaba! (Altyazı v${BuildConfig.VERSION_NAME})", "Test",
                     ayar.stilJson(), 5000
                 ) { ok, bilgi ->
                     runOnUiThread {
-                        durumYazi.text = when {
-                            ok -> "TV yanıt verdi ✓ (5 sn test yazısı görünmeli)"
+                        tvSonuc.text = when {
+                            ok -> "TV yanıt verdi ✓  (5 sn test yazısı görünmeli)"
                             bilgi == "HTTP 503" -> "TV'ye ulaşıldı ama TV'de katman izni yok."
                             else -> "TV'ye ulaşılamadı: $bilgi"
                         }
                     }
                 }
             }
-        })
-
-        kok.addView(MaterialSwitch(this).apply {
-            text = "Çeviriyi telefonda da göster"
-            isChecked = ayar.telefondaGoster
-            setOnCheckedChangeListener { _, b -> ayar.telefondaGoster = b }
-            setPadding(0, dp(10), 0, dp(4))
-        })
-
-        val tvSecenek = MaterialSwitch(this).apply {
-            text = "    ↳ Tam ekran modunda TV'ye de gönder"
-            isChecked = ayar.sadeceTvGonder
-            isEnabled = ayar.sadeceAltyazi
-            setOnCheckedChangeListener { _, b -> ayar.sadeceTvGonder = b }
-            setPadding(0, dp(2), 0, dp(4))
         }
-        kok.addView(MaterialSwitch(this).apply {
-            text = "Tam ekran altyazı modu (telefon kararır, büyük Türkçe yazı)"
-            isChecked = ayar.sadeceAltyazi
-            setOnCheckedChangeListener { _, b ->
-                ayar.sadeceAltyazi = b
-                tvSecenek.isEnabled = b
-                if (Durum.calisiyor) kisa("Durdurup yeniden başlatınca geçerli olur.")
-            }
-            setPadding(0, dp(4), 0, dp(2))
-        })
-        kok.addView(tvSecenek)
-
-        kok.addView(MaterialSwitch(this).apply {
-            text = "Çevrimiçi çeviri (daha doğal, internet gerekir)"
-            isChecked = ayar.cevrimici
-            setOnCheckedChangeListener { _, b -> ayar.cevrimici = b }
-            setPadding(0, dp(4), 0, dp(4))
-        })
-
-        kok.addView(gorunumBolumu())
-
-        kok.addView(etiket("Okuma aralığı"))
-        val aralikSatir = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        listOf(300L to "Hızlı", 450L to "Normal", 800L to "Pil dostu").forEach { (ms, ad) ->
-            aralikSatir.addView(Button(this).apply {
-                text = ad
-                alpha = if (ayar.aralikMs == ms) 1f else 0.55f
-                setOnClickListener {
-                    ayar.aralikMs = ms
-                    for (i in 0 until aralikSatir.childCount) aralikSatir.getChildAt(i).alpha = 0.55f
-                    alpha = 1f
-                }
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        tvSonuc = yazi("", 13f, soluk = true).apply {
+            visibility = View.GONE
+            setPadding(dp(4), dp(8), 0, 0)
         }
-        kok.addView(aralikSatir)
+        return kart(
+            yuzey(),
+            baslik("Android TV", "TV'deki Altyazı uygulaması açık olmalı"),
+            giris, ust(test, 10), tvSonuc
+        )
+    }
 
-        baslatDugme = MaterialButton(this).apply {
-            textSize = 17f
-            setPadding(0, dp(14), 0, dp(14))
-            setOnClickListener { baslatDurdur() }
+    private fun secenekKarti(): View {
+        val telefonda = anahtar("Telefonda da göster", "Çeviri telefon ekranında da görünür", ayar.telefondaGoster) {
+            ayar.telefondaGoster = it
         }
-        kok.addView(baslatDugme, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(18) })
-
-        durumYazi = TextView(this).apply {
-            text = "Hazır."
-            setPadding(0, dp(10), 0, dp(6))
+        val tvSecenek = anahtar(
+            "Tam ekranda TV'ye de gönder", "Tam ekran modundayken çeviriyi TV'ye de yollar",
+            ayar.sadeceTvGonder, ayar.sadeceAltyazi
+        ) { ayar.sadeceTvGonder = it }
+        val tamEkran = anahtar(
+            "Tam ekran altyazı modu", "Telefon kararır, büyük Türkçe yazı görünür", ayar.sadeceAltyazi
+        ) { b ->
+            ayar.sadeceAltyazi = b
+            tvSecenek.alpha = if (b) 1f else 0.45f
+            (tvSecenek.tag as MaterialSwitch).isEnabled = b
+            if (Durum.calisiyor) kisa("Durdurup yeniden başlatınca geçerli olur.")
         }
-        kok.addView(durumYazi)
+        val cevrimici = anahtar(
+            "Çevrimiçi çeviri", "Daha doğal çeviri; internet gerekir", ayar.cevrimici
+        ) { ayar.cevrimici = it }
+        return kart(yuzey(), baslik("Seçenekler"), telefonda, tamEkran, tvSecenek, cevrimici)
+    }
 
-        sonYazi = TextView(this).apply {
-            text = ""
-            textSize = 15f
-            setPadding(0, dp(6), 0, dp(12))
+    /** Başlık + açıklama solda, anahtar sağda. Anahtar satırın `tag`'inde. */
+    private fun anahtar(
+        ad: String, aciklama: String, acik: Boolean, etkin: Boolean = true, degisti: (Boolean) -> Unit
+    ): View {
+        val sw = MaterialSwitch(this).apply {
+            isChecked = acik
+            isEnabled = etkin
+            setOnCheckedChangeListener { _, b -> degisti(b) }
         }
-        kok.addView(sonYazi)
-
-        kok.addView(TextView(this).apply {
-            text = "Kullanım:\n1) TV adresini yaz (TV uygulaması açık olmalı).\n" +
-                "2) Başlat → ekran kaydı iznini ver.\n" +
-                "3) Xbox uygulamasında Remote Play'i aç.\n" +
-                "4) Sağ üstte \"Bölge\" ile İngilizce altyazı alanını, \"Kutu\" ile Türkçe altyazının yerini çiz.\n" +
-                "İlk çalıştırmada çeviri modeli (~30 MB) iner; sonra internetsiz çalışır."
-            alpha = 0.75f
-            textSize = 13f
-        })
-
-        kok.addView(TextView(this).apply {
-            text = "© Mehmet Karadeniz, 2026-2027"
-            alpha = 0.5f
-            textSize = 12f
-            gravity = Gravity.CENTER
-            setPadding(0, dp(24), 0, 0)
-        }, LinearLayout.LayoutParams(-1, -2))
-
-        return ScrollView(this).apply { addView(kok) }
+        val metin = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(yazi(ad, 15f))
+            addView(yazi(aciklama, 12f, soluk = true).apply { setPadding(0, dp(1), 0, 0) })
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(8), 0, dp(8))
+            alpha = if (etkin) 1f else 0.45f
+            tag = sw
+            addView(metin, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(sw)
+            setOnClickListener { if (sw.isEnabled) sw.toggle() }
+        }
     }
 
     private val yaziRenkleri = intArrayOf(
@@ -272,27 +380,22 @@ class MainActivity : AppCompatActivity() {
         Color.rgb(90, 20, 20), Color.rgb(20, 70, 40), Color.WHITE
     )
 
-    /** Altyazı görünümü: boyut, konum, yazı rengi, arka plan rengi ve şeffaflığı. */
-    private fun gorunumBolumu(): View {
-        val b = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(12), 0, dp(6))
-        }
-        b.addView(TextView(this).apply {
-            text = "Altyazı görünümü"
-            textSize = 16f
-            setTypeface(typeface, Typeface.BOLD)
-        })
+    /** Altyazı görünümü: önizleme, boyut, yazı tipi, renkler, şeffaflık. */
+    private fun gorunumKarti(): View {
         val onizleme = TextView(this).apply {
             text = "Örnek altyazı metni"
             gravity = Gravity.CENTER
-            setPadding(dp(12), dp(6), dp(12), dp(6))
+            setPadding(dp(14), dp(7), dp(14), dp(7))
             background = GradientDrawable().apply { cornerRadius = dp(8).toFloat() }
         }
-        val cerceve = FrameLayout(this).apply {
-            setBackgroundColor(Color.rgb(84, 110, 122))
-            setPadding(dp(8), dp(16), dp(8), dp(16))
-            addView(onizleme, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        val sahne = FrameLayout(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(84, 110, 122), Color.rgb(28, 38, 43))
+            ).apply { cornerRadius = dp(16).toFloat() }
+            minimumHeight = dp(120)
+            addView(onizleme, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM).apply {
+                bottomMargin = dp(16)
+            })
         }
         fun yenile(bildir: Boolean = true) {
             onizleme.textSize = ayar.yaziBoyutu.toFloat()
@@ -309,78 +412,161 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        b.addView(cerceve, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
-        b.addView(kaydirici("Yazı boyutu (en çok)", 12, 44, ayar.yaziBoyutu) { ayar.yaziBoyutu = it; yenile() })
-        b.addView(etiket("Yazı tipi"))
-        val tipSatir = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        YaziTipleri.liste.forEach { (id, ad) ->
-            tipSatir.addView(Button(this).apply {
-                text = ad
-                isAllCaps = false
-                typeface = YaziTipleri.getir(this@MainActivity, id)
-                alpha = if (ayar.yaziTipi == id) 1f else 0.55f
-                setOnClickListener {
-                    ayar.yaziTipi = id
-                    for (i in 0 until tipSatir.childCount) tipSatir.getChildAt(i).alpha = 0.55f
-                    alpha = 1f
-                    yenile()
-                }
-            })
-        }
-        b.addView(HorizontalScrollView(this).apply { addView(tipSatir) })
-        b.addView(TextView(this).apply {
-            text = "Yer ve genişlik: uygulama çalışırken sağ üstteki \"Kutu\" ile Türkçe altyazının " +
-                "görüneceği alanı çiz. Yazı sığmazsa kendiliğinden küçülür; yazı boyutu en büyük değerdir."
-            textSize = 13f
-            alpha = 0.75f
-            setPadding(0, dp(8), 0, 0)
-        })
-        b.addView(renkSatiri("Yazı rengi", yaziRenkleri, ayar.yaziRengi) { ayar.yaziRengi = it; yenile() })
-        b.addView(renkSatiri("Arka plan rengi", arkaRenkleri, ayar.arkaRengi) { ayar.arkaRengi = it; yenile() })
-        b.addView(kaydirici("Arka plan opaklığı (0 = tam şeffaf)", 0, 100, ayar.arkaOpaklik) { ayar.arkaOpaklik = it; yenile() })
         yenile(false)
-        return b
+
+        val tipler = pillGrubu(YaziTipleri.liste, ayar.yaziTipi, esit = false, tipli = true) {
+            ayar.yaziTipi = it; yenile()
+        }
+        val not = yazi(
+            "Yer ve genişlik: uygulama çalışırken sağ üstteki \"Kutu\" ile Türkçe altyazının görüneceği alanı çiz. " +
+                "Yazı sığmazsa kendiliğinden küçülür; boyut en büyük değerdir.",
+            12f, soluk = true
+        ).apply { setPadding(0, dp(12), 0, 0) }
+
+        return kart(
+            yuzey(),
+            baslik("Altyazı görünümü", "Telefonda ve TV'de görünen yazı"),
+            sahne,
+            kaydirici("Yazı boyutu", 12, 44, ayar.yaziBoyutu) { ayar.yaziBoyutu = it; yenile() },
+            etiket("Yazı tipi"), tipler,
+            renkSatiri("Yazı rengi", yaziRenkleri, ayar.yaziRengi) { ayar.yaziRengi = it; yenile() },
+            renkSatiri("Arka plan rengi", arkaRenkleri, ayar.arkaRengi) { ayar.arkaRengi = it; yenile() },
+            kaydirici("Arka plan opaklığı", 0, 100, ayar.arkaOpaklik, "%") { ayar.arkaOpaklik = it; yenile() },
+            not
+        )
     }
 
-    private fun kaydirici(ad: String, enAz: Int, enCok: Int, deger: Int, degisti: (Int) -> Unit): View {
-        val kutu = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val yazi = etiket("$ad: $deger")
-        kutu.addView(yazi)
-        kutu.addView(SeekBar(this).apply {
-            min = enAz; max = enCok; progress = deger
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(s: SeekBar?, v: Int, kullanici: Boolean) {
-                    yazi.text = "$ad: $v"
-                    if (kullanici) degisti(v)
+    private fun aralikKarti(): View = kart(
+        yuzey(),
+        baslik("Okuma aralığı", "Hızlı seçenek altyazıyı daha çabuk yakalar, pili daha çok harcar"),
+        pillGrubu(
+            listOf("300" to "Hızlı", "450" to "Normal", "800" to "Pil dostu"),
+            ayar.aralikMs.toString(), esit = true, tipli = false
+        ) { ayar.aralikMs = it.toLong() }
+    )
+
+    private fun kullanimKarti(): View {
+        val adimlar = listOf(
+            "TV adresini yaz (TV uygulaması açık olmalı).",
+            "Başlat'a bas ve ekran kaydı iznini ver.",
+            "Xbox uygulamasında Remote Play'i aç.",
+            "Sağ üstte \"Bölge\" ile İngilizce altyazı alanını, \"Kutu\" ile Türkçe altyazının yerini çiz."
+        )
+        val liste = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        adimlar.forEachIndexed { i, s ->
+            val no = yazi("${i + 1}", 13f, kalin = true).apply {
+                gravity = Gravity.CENTER
+                setTextColor(renk(MR.attr.colorOnPrimaryContainer))
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(renk(MR.attr.colorPrimaryContainer))
                 }
-                override fun onStartTrackingTouch(s: SeekBar?) {}
-                override fun onStopTrackingTouch(s: SeekBar?) {}
-            })
-        })
-        return kutu
+            }
+            liste.addView(
+                LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, dp(5), 0, dp(5))
+                    addView(no, LinearLayout.LayoutParams(dp(26), dp(26)).apply { marginEnd = dp(12) })
+                    addView(yazi(s, 14f), LinearLayout.LayoutParams(0, -2, 1f))
+                }
+            )
+        }
+        return kart(
+            yuzey(),
+            baslik("Nasıl kullanılır"),
+            liste,
+            yazi("İlk çalıştırmada çeviri modeli (~30 MB) iner; sonra internetsiz de çalışır.", 12f, soluk = true)
+                .apply { setPadding(0, dp(10), 0, 0) }
+        )
+    }
+
+    // ---------- Bileşenler ----------
+
+    /** Yuvarlak seçim düğmeleri. `esit` = satırı eşit paylaş, aksi halde yana kayar. */
+    private fun pillGrubu(
+        secenekler: List<Pair<String, String>>, secili: String, esit: Boolean, tipli: Boolean,
+        sec: (String) -> Unit
+    ): View {
+        val satir = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val pillar = mutableListOf<Pair<String, TextView>>()
+        fun boya(t: TextView, acik: Boolean) {
+            t.background = yuvarlak(renk(if (acik) MR.attr.colorPrimary else MR.attr.colorSurfaceVariant), 22)
+            t.setTextColor(renk(if (acik) MR.attr.colorOnPrimary else MR.attr.colorOnSurfaceVariant))
+        }
+        secenekler.forEach { (id, ad) ->
+            val t = TextView(this).apply {
+                text = ad
+                textSize = 14f
+                gravity = Gravity.CENTER
+                setPadding(dp(16), dp(10), dp(16), dp(10))
+                if (tipli) typeface = YaziTipleri.getir(this@MainActivity, id)
+            }
+            boya(t, id == secili)
+            t.setOnClickListener {
+                pillar.forEach { (k, v) -> boya(v, k == id) }
+                sec(id)
+            }
+            pillar.add(id to t)
+            val p = if (esit) LinearLayout.LayoutParams(0, -2, 1f) else LinearLayout.LayoutParams(-2, -2)
+            p.marginEnd = dp(8)
+            satir.addView(t, p)
+        }
+        return if (esit) satir else HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(satir)
+        }
+    }
+
+    private fun kaydirici(
+        ad: String, enAz: Int, enCok: Int, deger: Int, birim: String = "", degisti: (Int) -> Unit
+    ): View {
+        val sayi = yazi("$deger$birim", 14f, kalin = true).apply { setTextColor(renk(MR.attr.colorPrimary)) }
+        val ustSatir = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(yazi(ad, 13f, soluk = true), LinearLayout.LayoutParams(0, -2, 1f))
+            addView(sayi)
+            setPadding(0, dp(14), 0, 0)
+        }
+        val s = Slider(this).apply {
+            stepSize = 1f
+            valueFrom = enAz.toFloat()
+            valueTo = enCok.toFloat()
+            value = deger.toFloat()
+            addOnChangeListener { _, v, kullanici ->
+                sayi.text = "${v.toInt()}$birim"
+                if (kullanici) degisti(v.toInt())
+            }
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(ustSatir)
+            addView(s)
+        }
     }
 
     private fun renkSatiri(ad: String, renkler: IntArray, secili: Int, degisti: (Int) -> Unit): View {
         val kutu = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         kutu.addView(etiket(ad))
-        val satir = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, dp(4), 0, dp(2))
-        }
-        fun ciz(v: View, renk: Int, sec: Boolean) {
+        val satir = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fun ciz(v: View, dolgu: Int, sec: Boolean) {
             v.background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(renk)
-                setStroke(dp(if (sec) 4 else 1), if (sec) Color.rgb(30, 111, 217) else Color.GRAY)
+                setColor(dolgu)
+                setStroke(
+                    dp(if (sec) 3 else 1),
+                    if (sec) renk(MR.attr.colorPrimary) else renk(MR.attr.colorOutline)
+                )
             }
         }
-        renkler.forEach { renk ->
+        renkler.forEach { r ->
             val nokta = View(this)
-            ciz(nokta, renk, renk == secili)
+            ciz(nokta, r, r == secili)
             nokta.setOnClickListener {
                 for (i in 0 until satir.childCount) ciz(satir.getChildAt(i), renkler[i], false)
-                ciz(nokta, renk, true)
-                degisti(renk)
+                ciz(nokta, r, true)
+                degisti(r)
             }
             satir.addView(nokta, LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(10) })
         }
@@ -388,16 +574,19 @@ class MainActivity : AppCompatActivity() {
         return kutu
     }
 
-    private fun etiket(s: String) = TextView(this).apply {
-        text = s
-        textSize = 13f
-        alpha = 0.7f
-        setPadding(0, dp(8), 0, 0)
+    private fun dugmeyiGuncelle() {
+        val calisiyor = Durum.calisiyor
+        baslatDugme.text = if (calisiyor) "Durdur" else "Başlat"
+        baslatDugme.backgroundTintList =
+            ColorStateList.valueOf(renk(if (calisiyor) MR.attr.colorError else MR.attr.colorPrimary))
+        baslatDugme.setTextColor(renk(if (calisiyor) MR.attr.colorOnError else MR.attr.colorOnPrimary))
+        durumNokta.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(if (calisiyor) Color.rgb(46, 160, 67) else renk(MR.attr.colorOutline))
+        }
     }
 
-    private fun dugmeyiGuncelle() {
-        baslatDugme.text = if (Durum.calisiyor) "Durdur" else "Başlat"
-    }
+    // ---------- Eylemler ----------
 
     private fun baslatDurdur() {
         ayar.tvAdresi = tvAlan.text.toString()
@@ -414,14 +603,6 @@ class MainActivity : AppCompatActivity() {
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
             bildirimIzni.launch(Manifest.permission.POST_NOTIFICATIONS)
-            return
-        }
-        sesIzniIste()
-    }
-
-    private fun sesIzniIste() {
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            sesIzni.launch(Manifest.permission.RECORD_AUDIO)
             return
         }
         ekranIzniIste()

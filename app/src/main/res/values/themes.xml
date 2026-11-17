@@ -1,8 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.Altyazi" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">#1E6FD9</item>
+        <item name="colorPrimary">#2563EB</item>
         <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="android:statusBarColor">?android:colorBackground</item>
+        <item name="colorPrimaryContainer">#DBE7FF</item>
+        <item name="colorOnPrimaryContainer">#0B2A66</item>
+        <item name="colorSecondaryContainer">#E3E9F7</item>
+        <item name="colorOnSecondaryContainer">#1B2A4A</item>
+        <item name="colorSurface">#FFFFFF</item>
+        <item name="colorOnSurface">#151A24</item>
+        <item name="colorSurfaceVariant">#E8ECF5</item>
+        <item name="colorOnSurfaceVariant">#4A5468</item>
+        <item name="colorOutline">#9AA4B8</item>
+        <item name="colorOutlineVariant">#DDE2EE</item>
+        <item name="android:colorBackground">#F4F6FB</item>
+        <item name="android:windowBackground">#F4F6FB</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 </resources>
