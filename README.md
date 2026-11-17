@@ -17,6 +17,7 @@ Xbox oyunlarındaki İngilizce altyazıyı Türkçeye çeviren telefon uygulamas
 
 - Diğer uygulamaların üzerinde gösterme: kontrol çubuğu ve bölge seçimi için.
 - Ekran kaydı: Remote Play görüntüsünü okumak için.
+- Mikrofon (ses yakalama): Xbox sesini dinleyip yakalanabildiğini denemek için (kontrol çubuğundaki "Ses" düğmesi).
 - Bildirim: arka planda çalışırken gösterilen bildirim için.
 
 © Mehmet Karadeniz, 2026-2027

@@ -58,6 +58,11 @@ class MainActivity : AppCompatActivity() {
 
     private val bildirimIzni = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
+    ) { sesIzniIste() }
+
+    // Reddedilirse de devam: OCR çalışır, yalnızca ses yakalama olmaz.
+    private val sesIzni = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
     ) { ekranIzniIste() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -409,6 +414,14 @@ class MainActivity : AppCompatActivity() {
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
             bildirimIzni.launch(Manifest.permission.POST_NOTIFICATIONS)
+            return
+        }
+        sesIzniIste()
+    }
+
+    private fun sesIzniIste() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            sesIzni.launch(Manifest.permission.RECORD_AUDIO)
             return
         }
         ekranIzniIste()
