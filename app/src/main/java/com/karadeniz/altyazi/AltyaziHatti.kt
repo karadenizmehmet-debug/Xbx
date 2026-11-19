@@ -139,6 +139,9 @@ class AltyaziHatti(
         }
     }
 
+    /** Bölge değişti: aynı altyazı yeniden çevrilebilsin. */
+    fun sifirla() { isciH?.post { takip.sifirla() } }
+
     /** Görünüm değişti: ekrandaki çeviriyi (yoksa 2,5 sn'lik örneği) TV'ye yeniden gönder. */
     fun stiliTvyeGonder() {
         val adres = tvAdresi()

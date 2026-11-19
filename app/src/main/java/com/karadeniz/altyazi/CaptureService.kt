@@ -473,7 +473,7 @@ class CaptureService : Service() {
         BolgeSecici(this, wm, ayar.bolge, "İngilizce altyazının çıktığı alanı çiz") { yeni ->
             if (yeni != null) {
                 ayar.bolge = yeni
-                sonGonderilen = ""; aday = ""; adaySayac = 0
+                hat?.sifirla()
                 durum("Bölge kaydedildi.")
             }
             maske?.visibility = View.VISIBLE

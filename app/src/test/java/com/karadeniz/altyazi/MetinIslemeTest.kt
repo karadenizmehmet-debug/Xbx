@@ -43,4 +43,12 @@ class MetinIslemeTest {
         val t = KararlilikTakip()
         repeat(10) { assertEquals(Karar.Bekle, t.gelen("", 400)) }
     }
+
+    @Test fun kararlilik_sifirlaninceAyniMetniYenidenCevirir() {
+        val t = KararlilikTakip()
+        t.gelen("Hello there", 400); t.gelen("Hello there", 400)
+        t.sifirla()
+        assertEquals(Karar.Bekle, t.gelen("Hello there", 400))
+        assertEquals(Karar.Cevir("Hello there"), t.gelen("Hello there", 400))
+    }
 }

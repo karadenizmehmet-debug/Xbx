@@ -79,6 +79,27 @@ class KararlilikTakip(private val bosTemizlemeMs: Long = 1300L) {
         return Karar.Cevir(metin)
     }
 
+    /** Bölge değişti: aynı altyazı yeniden çevrilebilsin. */
+    fun sifirla() { sonGonderilen = ""; aday = ""; adaySayac = 0 }
+
     /** Çeviri ekrana yazıldı: boş kalırsa sonra silinecek. */
     fun ceviriGosterildi() { ekrandaMetinVar = true }
+}
+
+/** Android'den bağımsız dikdörtgen (piksel ya da 0..1 oran). */
+data class Oran(val sol: Float, val ust: Float, val sag: Float, val alt: Float)
+
+/** Ekranda seçilen dikdörtgeni (piksel) video karesinin oranına (0..1) çevirir. Video yoksa tüm kare. */
+fun MetinIsleme.ekrandanVideoya(secim: Oran, video: Oran): Oran {
+    val w = video.sag - video.sol; val h = video.alt - video.ust
+    if (w <= 0f || h <= 0f) return Oran(0f, 0f, 1f, 1f)
+    fun x(v: Float) = ((v - video.sol) / w).coerceIn(0f, 1f)
+    fun y(v: Float) = ((v - video.ust) / h).coerceIn(0f, 1f)
+    return Oran(x(secim.sol), y(secim.ust), x(secim.sag), y(secim.alt))
+}
+
+/** Video oranındaki bölgeyi ekran pikseline çevirir (bölge seçicinin başlangıç çerçevesi için). */
+fun MetinIsleme.videodanEkrana(bolge: Oran, video: Oran): Oran {
+    val w = video.sag - video.sol; val h = video.alt - video.ust
+    return Oran(video.sol + bolge.sol * w, video.ust + bolge.ust * h, video.sol + bolge.sag * w, video.ust + bolge.alt * h)
 }
