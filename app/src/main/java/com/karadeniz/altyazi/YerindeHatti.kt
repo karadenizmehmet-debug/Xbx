@@ -94,13 +94,20 @@ class YerindeHatti(
     private fun calis(kirpik: Bitmap, bolge: Oran) {
         val t = tanima ?: return
         // Telefon alanı: oyundaki telefon ekranda değilse (harita, oyun) okuma; ekrandaki çeviriyi sil
-        if (alan == Alan.TELEFON && ayar.telefonAlgila && !telefonGorunuyor(kirpik)) {
-            sonOkunan = "(telefon ekranı görünmüyor; telefon açıksa Görünüm > Telefon alanı'nı kapat)"
-            when (takip.gelen("", ayar.aralikMs)) {
-                Karar.Temizle -> yayinla(emptyList())
-                else -> {}
+        if (alan == Alan.TELEFON && ayar.telefonAlgila) {
+            val oran = telefonOrani(kirpik)
+            val esik = ayar.telefonEsik / 100f
+            // Telefon bir kez algılandıktan sonra eşiğin %60'ına inene dek açık sayılır (titremesin)
+            telefonAcik = oran >= (if (telefonAcik) esik * 0.6f else esik)
+            if (!telefonAcik) {
+                sonOkunan = "(telefon ekranı algılanmadı: açık yüzey %${(oran * 100).toInt()}, eşik %${ayar.telefonEsik}. " +
+                    "Telefon açıkken de çıkıyorsa Telefon algılama hassasiyetini düşür)"
+                when (takip.gelen("", ayar.aralikMs)) {
+                    Karar.Temizle -> yayinla(emptyList())
+                    else -> {}
+                }
+                return
             }
-            return
         }
         val sonuc = Tasks.await(t.process(InputImage.fromBitmap(kirpik, 0)))
         val min = ayar.minKelime(alan)
@@ -133,15 +140,17 @@ class YerindeHatti(
         }
     }
 
-    /** Kırpıktan 48×48 ızgara örnekle, telefon ekranı mı bak. */
-    private fun telefonGorunuyor(bmp: Bitmap): Boolean {
+    private var telefonAcik = false
+
+    /** Kırpıktan 48×48 ızgara örnekle: açık, soluk renkli yüzeyin oranı. */
+    private fun telefonOrani(bmp: Bitmap): Float {
         val n = 48
         val p = IntArray(n * n) { i ->
             val x = (((i % n) + 0.5f) * bmp.width / n).toInt().coerceIn(0, bmp.width - 1)
             val y = (((i / n) + 0.5f) * bmp.height / n).toInt().coerceIn(0, bmp.height - 1)
             bmp.getPixel(x, y)
         }
-        return YerindeIsleme.telefonEkraniMi(p)
+        return YerindeIsleme.telefonOrani(p)
     }
 
     /** Köşe noktaları (x[4], y[4]); yoksa düz kutudan. */
@@ -201,7 +210,7 @@ class YerindeHatti(
         val en = belirgin.take((belirgin.size * 0.4f).toInt().coerceAtLeast(3))
         val renk = android.graphics.Color.rgb(en.sumOf { it.r } / en.size, en.sumOf { it.g } / en.size, en.sumOf { it.b } / en.size)
         val fark = Math.abs(android.graphics.Color.luminance(renk) - android.graphics.Color.luminance(arka))
-        return if (fark >= 0.3f) renk else yedek
+        return if (fark >= 0.45f) renk else yedek
     }
 
     /** Yazı kutusunun biraz dışındaki halkadan 32 nokta; kanal başına ortanca (yazı pikselleri karışmasın). */
@@ -275,7 +284,7 @@ class YerindeHatti(
         val dizi = JSONArray()
         bloklar.forEachIndexed { i, b ->
             val o = JSONObject().put("text", ceviriler[i]).put("tek", b.tekSatir).put("aci", b.aci.toDouble())
-            o.put("olcek", ayar.alanBoyut(alan) / 100.0)
+            o.put("olcek", ayar.alanBoyut(alan) / 100.0).put("kalin", true)
             if (b.satirYuk > 0f) o.put("sy", b.satirYuk.toDouble())
             if (b.arka != null) o.put("arka", b.arka)
             if (b.yazi != null) o.put("yazi", b.yazi)

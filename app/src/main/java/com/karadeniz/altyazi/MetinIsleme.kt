@@ -214,16 +214,20 @@ object YerindeIsleme {
      * Oyundaki telefon ekranda mı? Telefon ekranı açık gri/beyaz (parlak, rengi soluk) geniş bir yüzeydir;
      * harita mavi, oyun dünyası renkli/karanlık. Örnek piksellerin en az [esik] kadarı böyleyse telefon açık sayılır.
      */
-    fun telefonEkraniMi(pikseller: IntArray, esik: Float = 0.15f): Boolean {
-        if (pikseller.isEmpty()) return false
+    fun telefonEkraniMi(pikseller: IntArray, esik: Float = 0.15f): Boolean =
+        pikseller.isNotEmpty() && telefonOrani(pikseller) >= esik
+
+    /** Örneklerin kaçı "açık, rengi soluk yüzey" (0..1). Telefon ekranı gri/beyaz/açık tonlu geniş bir yüzeydir. */
+    fun telefonOrani(pikseller: IntArray): Float {
+        if (pikseller.isEmpty()) return 0f
         val uygun = pikseller.count { p ->
             val r = (p shr 16) and 0xFF; val g = (p shr 8) and 0xFF; val b = p and 0xFF
             val enb = maxOf(r, g, b); val enk = minOf(r, g, b)
-            val parlak = (r * 299 + g * 587 + b * 114) / 1000 >= 150
-            val soluk = enb == 0 || (enb - enk).toFloat() / enb <= 0.22f
+            val parlak = (r * 299 + g * 587 + b * 114) / 1000 >= 130
+            val soluk = enb == 0 || (enb - enk).toFloat() / enb <= 0.30f
             parlak && soluk
         }
-        return uygun.toFloat() / pikseller.size >= esik
+        return uygun.toFloat() / pikseller.size
     }
 
     /** ML Kit köşe noktalarından eğik kutu: merkez, en (üst kenar), boy (sol kenar) ve üst kenarın açısı. */

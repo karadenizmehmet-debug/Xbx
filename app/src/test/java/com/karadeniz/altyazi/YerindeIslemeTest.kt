@@ -67,4 +67,12 @@ class YerindeIslemeTest {
         assertFalse(YerindeIsleme.telefonEkraniMi(IntArray(100) { if (it < 8) beyaz else mavi }))
         assertFalse(YerindeIsleme.telefonEkraniMi(IntArray(0)))
     }
+
+    @Test fun telefonOrani_dusukEsikAcikGriTelefonuYakalar() {
+        val acikGri = 0xFF9A9AA6.toInt(); val koyu = 0xFF202830.toInt()
+        val p = IntArray(100) { if (it < 9) acikGri else koyu }
+        assertEquals(0.09f, YerindeIsleme.telefonOrani(p), 0.001f)
+        assertTrue(YerindeIsleme.telefonEkraniMi(p, 0.08f))
+        assertFalse(YerindeIsleme.telefonEkraniMi(p, 0.15f))
+    }
 }

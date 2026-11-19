@@ -352,8 +352,9 @@ class AltyaziServisi : Service() {
             val u = (u0 + (kh0 - kh) / 2).coerceIn(0, (h - kh).coerceAtLeast(0))
             val dolgu = (kh * 0.08f).toInt().coerceAtLeast(1)
             val sy = b.optDouble("sy", 0.0)
+            val blokTip = if (b.optBoolean("kalin", true)) Typeface.create(tip, Typeface.BOLD) else tip
             val t = TextView(this).apply {
-                typeface = tip
+                typeface = blokTip
                 setTextColor(blokYazi)
                 gravity = if (tek) Gravity.CENTER else Gravity.CENTER_VERTICAL or Gravity.START
                 rotation = aci   // orijinal yazının eğikliği (oyundaki telefon yan duruyor)
@@ -362,7 +363,7 @@ class AltyaziServisi : Service() {
                 background = GradientDrawable().apply { cornerRadius = kh * 0.12f; setColor(blokArka) }
                 if (tek) { maxLines = 1; isSingleLine = true }
             }
-            val boya = TextPaint(t.paint).apply { typeface = tip }
+            val boya = TextPaint(t.paint).apply { typeface = blokTip }
             val ic = (kw - dolgu * 2).coerceAtLeast(1)
             fun yukseklik(boyut: Float): Int {
                 boya.textSize = boyut

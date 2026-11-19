@@ -604,6 +604,16 @@ class UzaktanOynatActivity : AppCompatActivity() {
         panel.addView(yazi("TV'deki altyazı", 18f, YAZI, kalin = true))
         panel.addView(yazi("Değişiklikler TV'de hemen görünür.", 13f, SOLUK))
 
+        // Yerinde çeviri boyutu (Telefon, Bildirim): canlı, en üstte
+        panel.addView(etiket("Çeviri boyutu (canlı)"))
+        listOf(Alan.TELEFON, Alan.BILDIRIM).forEach { a ->
+            val boyutBaslik = yazi("", 13f, YAZI)
+            fun boyutYaz(n: Int) { boyutBaslik.text = "${a.ad}: %$n (orijinale göre)" }
+            boyutYaz(ayar.alanBoyut(a))
+            panel.addView(boyutBaslik)
+            panel.addView(kaydirici(80, 250, ayar.alanBoyut(a)) { n -> ayar.alanBoyutYaz(a, n); boyutYaz(n); stiliGonder() })
+        }
+
         // Konum: kutunun üst kenarı (yükseklik korunur)
         panel.addView(etiket("Konum (yukarı ↔ aşağı)"))
         val k0 = ayar.kutu
@@ -654,11 +664,6 @@ class UzaktanOynatActivity : AppCompatActivity() {
             yaz(ayar.minKelime(a))
             panel.addView(baslik)
             panel.addView(kaydirici(1, 6, ayar.minKelime(a)) { n -> ayar.minKelimeYaz(a, n); yaz(n) })
-            val boyutBaslik = yazi("", 12f, SOLUK)
-            fun boyutYaz(n: Int) { boyutBaslik.text = "${a.ad} çeviri boyutu: %$n (orijinale göre)" }
-            boyutYaz(ayar.alanBoyut(a))
-            panel.addView(boyutBaslik)
-            panel.addView(kaydirici(80, 250, ayar.alanBoyut(a)) { n -> ayar.alanBoyutYaz(a, n); boyutYaz(n); stiliGonder() })
         }
 
         panel.addView(etiket("Telefon alanı"))
@@ -671,6 +676,11 @@ class UzaktanOynatActivity : AppCompatActivity() {
         algilaDugme.setOnClickListener { ayar.telefonAlgila = !ayar.telefonAlgila; algilaCiz() }
         algilaCiz()
         panel.addView(algilaDugme, LinearLayout.LayoutParams(-1, dp(44)))
+        val esikBaslik = yazi("", 12f, SOLUK)
+        fun esikYaz(n: Int) { esikBaslik.text = "Telefon algılama hassasiyeti: %$n (düşük = daha kolay algılar)" }
+        esikYaz(ayar.telefonEsik)
+        panel.addView(esikBaslik)
+        panel.addView(kaydirici(1, 30, ayar.telefonEsik) { n -> ayar.telefonEsik = n; esikYaz(n) })
 
         panel.addView(etiket("Küfür sansürü"))
         val sansurDugme = hap("") {}

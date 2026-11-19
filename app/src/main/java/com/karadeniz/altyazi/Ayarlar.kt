@@ -182,6 +182,11 @@ class Ayarlar(private val context: Context) {
         get() = p.getBoolean("telefonAlgila", true)
         set(v) = p.edit().putBoolean("telefonAlgila", v).apply()
 
+    /** Telefon algılama hassasiyeti: örneklerin en az bu yüzdesi açık yüzey olmalı (düşük = daha kolay algılar). */
+    var telefonEsik: Int
+        get() = p.getInt("telefonEsik", 8)
+        set(v) = p.edit().putInt("telefonEsik", v).apply()
+
     /** Uygulama içi modda oyun sesi telefondan gelsin mi? */
     var webSes: Boolean
         get() = p.getBoolean("webSes", true)
