@@ -72,6 +72,9 @@ class UzaktanOynatActivity : AppCompatActivity() {
     private lateinit var ayar: Ayarlar
     private lateinit var web: WebView
     private lateinit var webKap: FrameLayout
+    private lateinit var kart: LinearLayout
+    /** Oyun akışı açıkken pencere tam 16:9 olur (siyah boşluk kalmaz); giriş/konsol sayfalarında uzun kalır. */
+    private var oyunda = false
     private lateinit var durumNokta: View
     private lateinit var durumYazi: TextView
     private lateinit var ceviri: TextView
@@ -166,7 +169,7 @@ class UzaktanOynatActivity : AppCompatActivity() {
         kok.addView(webKap, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(10) })
 
         // Türkçe çeviri kartı
-        val kart = LinearLayout(this).apply {
+        kart = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = yuvarlak(KART, 22, CERCEVE)
             setPadding(dp(18), dp(12), dp(18), dp(14))
@@ -331,7 +334,10 @@ class UzaktanOynatActivity : AppCompatActivity() {
                     a.optDouble(2).toFloat(), a.optDouble(3).toFloat()
                 )
             }
-            "durum" -> { jsDurum = m; jsDurumZamani = SystemClock.elapsedRealtime() }
+            "durum" -> {
+                jsDurum = m; jsDurumZamani = SystemClock.elapsedRealtime()
+                pencereyiAyarla(m.optInt("w", 0) > 0 && m.optInt("h", 0) > 0)
+            }
             "temizle" -> hat?.temizle()
             "hata" -> { sonHata = m.optString("m"); durum("Görüntü okunamıyor: $sonHata", hata = true) }
             "yuklendi" -> {
@@ -340,6 +346,26 @@ class UzaktanOynatActivity : AppCompatActivity() {
                 durum("Bağlandı. Konsolunu seçip uzaktan oynatmayı başlat.")
             }
         }
+    }
+
+    /** Oyunda: pencere video oranında (16:9), boş kalan yeri çeviri kartı alır. Değilse pencere uzun. */
+    private fun pencereyiAyarla(yeni: Boolean) {
+        if (yeni == oyunda) return
+        oyunda = yeni
+        val vw = jsDurum.optInt("w", 16).coerceAtLeast(1); val vh = jsDurum.optInt("h", 9).coerceAtLeast(1)
+        val wlp = webKap.layoutParams as LinearLayout.LayoutParams
+        val klp = kart.layoutParams as LinearLayout.LayoutParams
+        if (oyunda) {
+            wlp.height = (webKap.width.coerceAtLeast(1) * vh / vw) + dp(2); wlp.weight = 0f
+            klp.height = 0; klp.weight = 1f
+            ceviri.textSize = 24f; ceviri.maxLines = 6
+        } else {
+            wlp.height = 0; wlp.weight = 1f
+            klp.height = LinearLayout.LayoutParams.WRAP_CONTENT; klp.weight = 0f
+            ceviri.textSize = 20f; ceviri.maxLines = 4
+        }
+        webKap.layoutParams = wlp
+        kart.layoutParams = klp
     }
 
     private fun kareGeldi(base64Jpeg: String) {

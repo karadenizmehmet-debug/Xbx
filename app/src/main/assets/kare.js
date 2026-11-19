@@ -70,6 +70,21 @@
     if (!temizlendi && Date.now() - sonGoruntu > 1500) { temizlendi = true; gonder({ t: 'temizle' }); }
   }
 
+  // Ses: Remote Play sesi ayrı bir <audio> öğesinden ya da WebAudio'dan gelebilir.
+  // Tüm medya öğelerini sustur ve akışlardaki ses izlerini kapat (WebAudio'ya giden ses de kesilir).
+  function sesUygula() {
+    var liste = document.querySelectorAll('audio,video');
+    for (var i = 0; i < liste.length; i++) {
+      var e = liste[i];
+      if (e.muted === sesAcik) e.muted = !sesAcik;
+      var akis = e.srcObject;
+      if (akis && akis.getAudioTracks) {
+        var izler = akis.getAudioTracks();
+        for (var j = 0; j < izler.length; j++) if (izler[j].enabled !== sesAcik) izler[j].enabled = sesAcik;
+      }
+    }
+  }
+
   // Kontrol et için 2 sn'de bir durum bildir
   var sonDurum = 0;
   function durumBildir(v) {
@@ -84,7 +99,7 @@
     var v = videoBul();
     durumBildir(v);
     if (!v) { goruntuYok(); return; }
-    v.muted = !sesAcik;
+    sesUygula();
     if (v.paused) { goruntuYok(); return; }
     sonGoruntu = Date.now(); temizlendi = false;
 
@@ -111,7 +126,7 @@
 
   window.__altyazi = {
     bolge: function (l, t, r, b) { bolge = [l, t, r, b]; },
-    ses: function (acik) { sesAcik = !!acik; var v = videoBul(); if (v) v.muted = !sesAcik; },
+    ses: function (acik) { sesAcik = !!acik; sesUygula(); },
     aralik: function (ms) { aralikMs = ms; },
     dur: function () { calisiyor = false; },
     devam: function () { calisiyor = true; sonAlan = ''; }
