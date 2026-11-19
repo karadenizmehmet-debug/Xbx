@@ -47,6 +47,8 @@ class YerindeHatti(
     private val tv = TvGonderici()
     private val cevrimici = CevrimiciCeviri()
     private val takip = KararlilikTakip()
+    private val sozluk = Sozluk.al(context)
+    private var sozlukSurum = -1
     private val onbellek = object : LinkedHashMap<String, String>(64, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > ONBELLEK
     }
@@ -110,10 +112,10 @@ class YerindeHatti(
             val satirSatir = alan == Alan.BILDIRIM && YerindeIsleme.satirSatirMi(metinler)
             if (satirSatir || (satirlar.size == 1 && b.lines.size == 1)) {
                 // Kumanda ipuçları gibi kısa satırlar: her satır kendi yerine, düğme simgesi açıkta kalır
-                satirlar.mapIndexedNotNull { i, l -> satirKoseleri(l)?.let { blokYap(metinler[i], it, kirpik, bolge, true) } }
+                satirlar.mapIndexedNotNull { i, l -> satirKoseleri(l)?.let { blokYap(metinler[i], it, kirpik, bolge, true, 1) } }
             } else {
                 val k = koseler(b.cornerPoints, b.boundingBox) ?: return@flatMap emptyList()
-                listOf(blokYap(metinler.joinToString(" ").replace(Regex("\\s+"), " ").trim(), k, kirpik, bolge, false))
+                listOf(blokYap(metinler.joinToString(" ").replace(Regex("\\s+"), " ").trim(), k, kirpik, bolge, false, satirlar.size))
             }
         }.filter { YerindeIsleme.uygunMu(it.metin, min) }
             .sortedWith(compareBy({ it.kutu.ust }, { it.kutu.sol }))
@@ -159,15 +161,47 @@ class YerindeHatti(
             floatArrayOf(ilk[0].y.toFloat(), son[1].y.toFloat(), son[2].y.toFloat(), ilk[3].y.toFloat())
     }
 
-    /** Eğik kutu + orijinalden örneklenen arka plan rengi (yazının hemen çevresi) ve okunur yazı rengi. */
-    private fun blokYap(metin: String, k: Pair<FloatArray, FloatArray>, bmp: Bitmap, bolge: Oran, tek: Boolean): Blok {
+    /** Eğik kutu + orijinalden örneklenen arka plan ve yazı rengi; tek satır yüksekliği yazı boyunu belirler. */
+    private fun blokYap(
+        metin: String, k: Pair<FloatArray, FloatArray>, bmp: Bitmap, bolge: Oran, tek: Boolean, satirSayisi: Int
+    ): Blok {
         val e = YerindeIsleme.egikKutu(k.first, k.second)
         val arka = renkOrnekle(bmp, e)
-        val parlak = android.graphics.Color.luminance(arka) > 0.5f
+        val video = YerindeIsleme.kirpiktanVideoya(e.kutu, bmp.width, bmp.height, bolge)
+        val yazi = yaziRengiOrnekle(bmp, e, arka)
         return Blok(
-            metin, YerindeIsleme.kirpiktanVideoya(e.kutu, bmp.width, bmp.height, bolge), tek, e.aci,
-            arka, if (parlak) android.graphics.Color.rgb(20, 20, 20) else android.graphics.Color.WHITE
+            metin, video, tek, e.aci, arka, yazi,
+            satirYuk = (video.alt - video.ust) / satirSayisi.coerceAtLeast(1)
         )
+    }
+
+    /**
+     * Orijinal yazının gerçek rengi: kutu içinden ızgara örnekle, arka plandan en çok ayrılan noktaların ortalaması.
+     * Yazı yeterince belirgin değilse (örnek yok, kontrast düşük) arka plana göre siyah/beyaz.
+     */
+    private fun yaziRengiOrnekle(bmp: Bitmap, e: EgikKutu, arka: Int): Int {
+        val yedek = if (android.graphics.Color.luminance(arka) > 0.5f) android.graphics.Color.rgb(20, 20, 20) else android.graphics.Color.WHITE
+        val cx = (e.kutu.sol + e.kutu.sag) / 2; val cy = (e.kutu.ust + e.kutu.alt) / 2
+        val yw = (e.kutu.sag - e.kutu.sol) / 2; val yh = (e.kutu.alt - e.kutu.ust) / 2
+        val r = Math.toRadians(e.aci.toDouble()); val c = Math.cos(r).toFloat(); val sn = Math.sin(r).toFloat()
+        val ar = android.graphics.Color.red(arka); val ag = android.graphics.Color.green(arka); val ab = android.graphics.Color.blue(arka)
+        data class Nokta(val uzak: Int, val r: Int, val g: Int, val b: Int)
+        val noktalar = ArrayList<Nokta>()
+        for (iy in 0 until 6) for (ix in 0 until 24) {
+            val dx = (-1f + 2f * (ix + 0.5f) / 24f) * yw * 0.96f
+            val dy = (-1f + 2f * (iy + 0.5f) / 6f) * yh * 0.8f
+            val x = (cx + dx * c - dy * sn).toInt(); val y = (cy + dx * sn + dy * c).toInt()
+            if (x !in 0 until bmp.width || y !in 0 until bmp.height) continue
+            val p = bmp.getPixel(x, y)
+            val pr = android.graphics.Color.red(p); val pg = android.graphics.Color.green(p); val pb = android.graphics.Color.blue(p)
+            noktalar.add(Nokta(Math.abs(pr - ar) + Math.abs(pg - ag) + Math.abs(pb - ab), pr, pg, pb))
+        }
+        val belirgin = noktalar.filter { it.uzak >= 150 }.sortedByDescending { it.uzak }
+        if (belirgin.size < 4) return yedek
+        val en = belirgin.take((belirgin.size * 0.4f).toInt().coerceAtLeast(3))
+        val renk = android.graphics.Color.rgb(en.sumOf { it.r } / en.size, en.sumOf { it.g } / en.size, en.sumOf { it.b } / en.size)
+        val fark = Math.abs(android.graphics.Color.luminance(renk) - android.graphics.Color.luminance(arka))
+        return if (fark >= 0.3f) renk else yedek
     }
 
     /** Yazı kutusunun biraz dışındaki halkadan 32 nokta; kanal başına ortanca (yazı pikselleri karışmasın). */
@@ -195,31 +229,44 @@ class YerindeHatti(
         return android.graphics.Color.rgb(orta(rs), orta(gs), orta(bs))
     }
 
+    /** Önbellek, yoksa sözlük (sayılar yerine konur). Sözlükten gelen önbelleğe de alınır. */
+    private fun hazirCeviri(metin: String): String? {
+        onbellek[metin]?.let { return it }
+        if (!ayar.sozlukAcik) return null
+        val s = sozluk.bul(metin) ?: return null
+        return CeviriBicim.geriBuyut(metin, s).also { onbellek[metin] = it }
+    }
+
     /**
-     * Önbellekte olmayanları tek istekte, ekrandaki sırayla çevir (konuşma bağlamı korunur).
+     * Sözlükte/önbellekte olmayanları tek istekte, ekrandaki sırayla çevir (konuşma bağlamı korunur).
      * Toplu istek tutmazsa her biri tek tek çevrilir.
      */
     private fun topluCevir(metinler: List<String>) {
-        val eksik = metinler.distinct().filter { it !in onbellek }
+        val eksik = metinler.distinct().filter { hazirCeviri(it) == null }
         if (eksik.size < 2 || !ayar.cevrimici) return
         val sonuc = try { cevrimici.cevirToplu(eksik.map { CeviriBicim.duzelt(it) }) } catch (_: Exception) { null } ?: return
-        eksik.forEachIndexed { i, m -> onbellek[m] = CeviriBicim.geriBuyut(m, sonuc[i]) }
+        eksik.forEachIndexed { i, m ->
+            onbellek[m] = CeviriBicim.geriBuyut(m, sonuc[i])
+            if (ayar.sozlukAcik) sozluk.otomatikKaydet(m, sonuc[i])
+        }
     }
 
     private fun cevir(metin: String): String {
-        onbellek[metin]?.let { return it }
+        hazirCeviri(metin)?.let { return it }
         val girdi = CeviriBicim.duzelt(metin)
         val tr = (if (ayar.cevrimici) try { cevrimici.cevir(girdi) } catch (_: Exception) { null } else null)
             ?.takeIf { it.isNotBlank() }
             ?: cevirmen?.let { try { Tasks.await(it.translate(girdi)) } catch (_: Exception) { null } }
-            ?: metin
+            ?: return metin   // çeviri yok: önbelleğe/sözlüğe yazma, sonra tekrar denensin
         val son = CeviriBicim.geriBuyut(metin, tr)
         onbellek[metin] = son
+        if (ayar.sozlukAcik) sozluk.otomatikKaydet(metin, tr)
         return son
     }
 
     private fun yayinla(bloklar: List<Blok>) {
         if (kapandi) return
+        if (sozluk.surum != sozlukSurum) { onbellek.clear(); sozlukSurum = sozluk.surum }   // sözlük düzenlendi
         yayinda = bloklar
         sonGonderim = SystemClock.elapsedRealtime()
         topluCevir(bloklar.map { it.metin })
@@ -228,6 +275,7 @@ class YerindeHatti(
         val dizi = JSONArray()
         bloklar.forEachIndexed { i, b ->
             val o = JSONObject().put("text", ceviriler[i]).put("tek", b.tekSatir).put("aci", b.aci.toDouble())
+            if (b.satirYuk > 0f) o.put("sy", b.satirYuk.toDouble())
             if (b.arka != null) o.put("arka", b.arka)
             if (b.yazi != null) o.put("yazi", b.yazi)
             dizi.put(o.put("kutu", JSONArray()

@@ -120,11 +120,11 @@
     var sw = Math.round((b[2] - b[0]) * v.videoWidth), sh = Math.round((b[3] - b[1]) * v.videoHeight);
     if (sw < 8 || sh < 8) return;
     // Küçük yazılar (kumanda ipuçları) için 3 kata kadar büyüt
-    var olcek = id === 'altyazi' ? 1 : Math.max(1, Math.min(3, 1600 / sw));
+    var olcek = id === 'altyazi' ? Math.max(1, Math.min(2, 1400 / sw)) : Math.max(1, Math.min(3, 1600 / sw));
     tuval.width = Math.round(sw * olcek); tuval.height = Math.round(sh * olcek);
     try {
       ctx.drawImage(v, sx, sy, sw, sh, 0, 0, tuval.width, tuval.height);
-      var veri = tuval.toDataURL('image/jpeg', id === 'altyazi' ? 0.85 : 0.93);
+      var veri = tuval.toDataURL('image/jpeg', id === 'altyazi' ? 0.92 : 0.93);
       gonder({ t: 'kare', a: id, d: veri.substring(veri.indexOf(',') + 1) });
     } catch (e) {
       // Kare henüz hazır değilse sessiz geç; güvenlik engeli (SecurityError) bir kez bildirilir

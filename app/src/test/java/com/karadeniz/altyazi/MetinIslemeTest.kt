@@ -28,6 +28,23 @@ class MetinIslemeTest {
         assertEquals(Karar.Bekle, t.gelen("Hello there", 400))
     }
 
+    @Test fun kararlilik_ceviriBasarisizsaAyniMetinTekrarDenenir() {
+        val t = KararlilikTakip()
+        t.gelen("Hello there", 400)
+        assertEquals(Karar.Cevir("Hello there"), t.gelen("Hello there", 400))
+        t.ceviriBasarisiz()
+        t.gelen("Hello there", 400)
+        assertEquals(Karar.Cevir("Hello there"), t.gelen("Hello there", 400))
+    }
+
+    @Test fun kararlilik_benzerAmaFarkliCumleAtlanmaz() {
+        val t = KararlilikTakip()
+        t.gelen("We should go to the north gate now", 400)
+        t.gelen("We should go to the north gate now", 400)
+        t.gelen("We should go to the south gate now", 400)
+        assertEquals(Karar.Cevir("We should go to the south gate now"), t.gelen("We should go to the south gate now", 400))
+    }
+
     @Test fun kararlilik_bosKaldigindaBirKezTemizler() {
         val t = KararlilikTakip()
         t.gelen("Hello there", 400); t.gelen("Hello there", 400)

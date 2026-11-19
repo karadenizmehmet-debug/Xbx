@@ -23,6 +23,11 @@ class Ayarlar(private val context: Context) {
         set(v) = p.edit().putString("tvAdi", v).apply()
 
     /** Çeviride küfürleri yıldızla (varsayılan açık). */
+    /** Sabit çeviri sözlüğü açık mı (kayıtlı yazılar çevirmene sorulmadan çevrilir). */
+    var sozlukAcik: Boolean
+        get() = p.getBoolean("sozlukAcik", true)
+        set(v) = p.edit().putBoolean("sozlukAcik", v).apply()
+
     var sansur: Boolean
         get() = p.getBoolean("sansur", true)
         set(v) = p.edit().putBoolean("sansur", v).apply()

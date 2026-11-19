@@ -293,6 +293,8 @@ class AltyaziServisi : Service() {
     /** Alan kimliği → o alanın blok katmanı ve güvenlik gizleyicisi. */
     private val alanKatmanlari = mutableMapOf<String, FrameLayout>()
     private val alanGizleyiciler = mutableMapOf<String, Runnable>()
+    /** Alanda en son gösterilen metinlerin imzası; değişince yeni yazı yumuşakça belirir, yalnız konum kaydıysa titremez. */
+    private val alanImzalari = mutableMapOf<String, String>()
 
     /**
      * Her bloğu ekranın aynı oranındaki yerine, İngilizcesini kapatan koyu bir kutu içinde çizer.
@@ -306,7 +308,10 @@ class AltyaziServisi : Service() {
         }
         katman.removeAllViews()
         alanGizleyiciler[id]?.let { ana.removeCallbacks(it) }
-        if (bloklar.length() == 0) return
+        if (bloklar.length() == 0) { alanImzalari.remove(id); return }
+        val imza = (0 until bloklar.length()).joinToString("|") { bloklar.optJSONObject(it)?.optString("text", "") ?: "" }
+        val yeniMetin = alanImzalari[id] != imza
+        alanImzalari[id] = imza
 
         val m = resources.displayMetrics
         val w = m.widthPixels; val h = m.heightPixels
@@ -340,6 +345,7 @@ class AltyaziServisi : Service() {
             val kw = (ham[2] - ham[0] + pay * 2).toInt().coerceAtLeast(30)
             val kh = (ham[3] - ham[1] + pay * 2).toInt().coerceAtLeast(14)
             val dolgu = (kh * 0.08f).toInt().coerceAtLeast(1)
+            val sy = b.optDouble("sy", 0.0)
             val t = TextView(this).apply {
                 typeface = tip
                 setTextColor(blokYazi)
@@ -352,7 +358,12 @@ class AltyaziServisi : Service() {
             }
             val boya = TextPaint(t.paint).apply { typeface = tip }
             val ic = (kw - dolgu * 2).coerceAtLeast(1)
+            fun yukseklik(boyut: Float): Int {
+                boya.textSize = boyut
+                return StaticLayout.Builder.obtain(metin, 0, metin.length, boya, ic).setIncludePad(false).build().height
+            }
             var boyut: Float
+            var yuk = kh
             if (tek) {
                 // Tek satır: orijinalle aynı kutu; yazı hem eni hem boyu sığana kadar küçülür
                 boyut = kh * 0.72f
@@ -363,18 +374,22 @@ class AltyaziServisi : Service() {
                     boyut -= 0.5f
                 }
             } else {
-                boyut = (kh * 0.6f).coerceAtMost(h * 0.05f).coerceAtLeast(enAz)
-                while (boyut > enAz) {
-                    boya.textSize = boyut
-                    if (StaticLayout.Builder.obtain(metin, 0, metin.length, boya, ic)
-                            .setIncludePad(false).build().height <= kh - 2) break
-                    boyut -= 0.5f
-                }
+                // Orijinalin satır yüksekliğinden başla (oyundaki yazıyla aynı büyüklük). Türkçe uzunsa önce biraz
+                // küçül (%72'ye kadar), yine sığmazsa kutu en fazla 1,6 kat aşağı uzar, o da yetmezse küçülmeye devam.
+                boya.textSize = 100f
+                val satirOrani = (boya.fontMetrics.descent - boya.fontMetrics.ascent) / 100f
+                val hedef = if (sy > 0) (sy * ho * h / satirOrani).toFloat() else kh * 0.6f
+                boyut = hedef.coerceAtMost(h * 0.06f).coerceAtLeast(enAz)
+                val taban = (boyut * 0.72f).coerceAtLeast(enAz)
+                val sinir = (kh * 1.6f).toInt()
+                while (boyut > taban && yukseklik(boyut) > kh - 2) boyut -= 0.5f
+                while (boyut > enAz && yukseklik(boyut) > sinir) boyut -= 0.5f
+                yuk = maxOf(kh, minOf(yukseklik(boyut) + dolgu * 2, sinir))
             }
             t.setTextSize(TypedValue.COMPLEX_UNIT_PX, boyut)
             t.text = metin
-            // Kutu orijinalle aynı boyda: yazı sığana kadar küçülür, kutu uzamaz
-            katman.addView(t, FrameLayout.LayoutParams(kw, kh).apply { leftMargin = l; topMargin = u })
+            if (yeniMetin) { t.alpha = 0f; t.animate().alpha(1f).setDuration(140).start() }
+            katman.addView(t, FrameLayout.LayoutParams(kw, yuk).apply { leftMargin = l; topMargin = u })
         }
         val gizleyici = Runnable { katman.removeAllViews() }
         alanGizleyiciler[id] = gizleyici
@@ -449,7 +464,7 @@ class AltyaziServisi : Service() {
         ana.removeCallbacksAndMessages(null)
         kok?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         kok = null; kap = null; yazi = null
-        alanKatmanlari.clear(); alanGizleyiciler.clear()
+        alanKatmanlari.clear(); alanGizleyiciler.clear(); alanImzalari.clear()
         super.onDestroy()
     }
 }

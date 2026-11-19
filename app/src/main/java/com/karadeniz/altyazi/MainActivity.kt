@@ -94,6 +94,7 @@ class MainActivity : AppCompatActivity() {
             sonYazi.visibility = View.VISIBLE
         }
         dugmeyiGuncelle()
+        sozlukDugmesi?.text = "Sözlüğü aç / düzenle (${Sozluk.al(this).boyut()})"
         bulunanTvler.clear()
         bulucu = TvBulucu(this, ::tvBulundu, ::tvKayboldu).also { it.baslat() }
         // Birkaç saniye içinde hiçbir şey bulunmazsa kullanıcıya söyle
@@ -179,6 +180,7 @@ class MainActivity : AppCompatActivity() {
         kok.addView(durumKarti())
         kok.addView(tvKarti())
         kok.addView(secenekKarti())
+        kok.addView(sozlukKarti())
         kok.addView(gorunumKarti())
         kok.addView(aralikKarti())
         kok.addView(kullanimKarti())
@@ -407,6 +409,21 @@ class MainActivity : AppCompatActivity() {
         ) { ayar.sansur = it }
         return kart(yuzey(), baslik("Seçenekler"), telefonda, tamEkran, tvSecenek, cevrimici, sansur)
     }
+
+    /** Sözlük: sabit çevirileri aç/kapat, düzenleme ekranına git. */
+    private fun sozlukKarti(): View {
+        val kullan = anahtar(
+            "Sözlüğü kullan", "Kayıtlı yazılar çevirmene sorulmadan, hep aynı çevrilir", ayar.sozlukAcik
+        ) { ayar.sozlukAcik = it }
+        val ac = MaterialButton(this).apply {
+            text = "Sözlüğü aç / düzenle (${Sozluk.al(this@MainActivity).boyut()})"
+            setOnClickListener { startActivity(Intent(this@MainActivity, SozlukActivity::class.java)) }
+        }
+        sozlukDugmesi = ac
+        return kart(yuzey(), baslik("Sözlük", "Health, Stones gibi hep aynı yazıları bir kez kaydeder; yanlışı sen düzeltirsin"), kullan, ust(ac, 8))
+    }
+
+    private var sozlukDugmesi: MaterialButton? = null
 
     /** Başlık + açıklama solda, anahtar sağda. Anahtar satırın `tag`'inde. */
     private fun anahtar(

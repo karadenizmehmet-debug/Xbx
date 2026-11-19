@@ -68,10 +68,10 @@ class KararlilikTakip(private val bosTemizlemeMs: Long = 1300L) {
             return Karar.Bekle
         }
         bosSure = 0
-        if (MetinIsleme.benzerlik(n, sonGonderilen) >= 0.82) return Karar.Bekle   // aynı altyazı hâlâ ekranda
+        if (MetinIsleme.benzerlik(n, sonGonderilen) >= 0.93) return Karar.Bekle   // aynı altyazı hâlâ ekranda (eşik düşükse benzer ama farklı cümleler atlanır)
 
         // Yazı beliriyor/değişiyorsa bir kare daha bekle (kararlı olsun)
-        if (MetinIsleme.benzerlik(n, aday) >= 0.9) adaySayac++ else { aday = n; adaySayac = 1 }
+        if (MetinIsleme.benzerlik(n, aday) >= 0.85) adaySayac++ else { aday = n; adaySayac = 1 }
         if (adaySayac < 2) return Karar.Bekle
 
         sonGonderilen = n
@@ -89,6 +89,9 @@ class KararlilikTakip(private val bosTemizlemeMs: Long = 1300L) {
 
     /** Bölge değişti: aynı altyazı yeniden çevrilebilsin. */
     fun sifirla() { sonGonderilen = ""; aday = ""; adaySayac = 0 }
+
+    /** Çeviri hiç üretilemedi: aynı altyazı tekrar denensin (yoksa sonsuza dek atlanırdı). */
+    fun ceviriBasarisiz() { sonGonderilen = ""; aday = ""; adaySayac = 0 }
 
     /** Çeviri ekrana yazıldı: boş kalırsa sonra silinecek. */
     fun ceviriGosterildi() { ekrandaMetinVar = true }
@@ -162,7 +165,9 @@ enum class Alan(val id: String, val ad: String, val minKelimeVarsayilan: Int) {
  */
 data class Blok(
     val metin: String, val kutu: Oran, val tekSatir: Boolean = false,
-    val aci: Float = 0f, val arka: Int? = null, val yazi: Int? = null
+    val aci: Float = 0f, val arka: Int? = null, val yazi: Int? = null,
+    /** Orijinalde tek satırın yüksekliği (video oranı); TV yazı boyunu buna göre başlatır. 0 = bilinmiyor. */
+    val satirYuk: Float = 0f
 )
 
 /** Dört köşeden (sol-üst, sağ-üst, sağ-alt, sol-alt) döndürülmemiş kutu ve açı. */

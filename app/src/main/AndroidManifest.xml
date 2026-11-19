@@ -31,6 +31,10 @@
         </activity>
 
         <activity
+            android:name=".SozlukActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".UzaktanOynatActivity"
             android:exported="false"
             android:screenOrientation="portrait"
