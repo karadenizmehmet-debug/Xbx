@@ -37,16 +37,6 @@ import android.util.TypedValue
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
-import com.google.mlkit.common.model.DownloadConditions
-import com.google.mlkit.nl.translate.TranslateLanguage
-import com.google.mlkit.nl.translate.Translation
-import com.google.mlkit.nl.translate.Translator
-import com.google.mlkit.nl.translate.TranslatorOptions
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.Text
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.TextRecognizer
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 
 /**
  * Ekranı (Remote Play görüntüsünü) yakalar, seçili bölgeden altyazıyı okur,
@@ -61,7 +51,6 @@ class CaptureService : Service() {
         const val EK_VERI = "veri"
         private const val KANAL = "altyazi_kanal"
         private const val BILDIRIM_ID = 7
-        private const val BOS_TEMIZLEME_MS = 1300L
     }
 
     private lateinit var ayar: Ayarlar
@@ -77,20 +66,9 @@ class CaptureService : Service() {
     private var yukseklik = 0
     private var dpi = 0
 
-    private var tanima: TextRecognizer? = null
-    private var cevirmen: Translator? = null
-    private var modelHazir = false
-    private val tv = TvGonderici()
-    private val cevrimici = CevrimiciCeviri()
-    private val agIsi = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private var hat: AltyaziHatti? = null
 
-    @Volatile private var mesgul = false
     @Volatile private var duraklat = false
-    private var sonGonderilen = ""      // normalize edilmiş, en son çevrilen metin
-    private var aday = ""               // kararlılık bekleyen metin
-    private var adaySayac = 0
-    private var bosSure = 0L
-    private var ekrandaMetinVar = false
 
     private var kontrolBar: View? = null
     private var ceviriKutusu: TextView? = null
@@ -170,21 +148,7 @@ class CaptureService : Service() {
             okuyucu!!.surface, null, isciH
         )
 
-        tanima = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-        cevirmen = Translation.getClient(
-            TranslatorOptions.Builder()
-                .setSourceLanguage(TranslateLanguage.ENGLISH)
-                .setTargetLanguage(TranslateLanguage.TURKISH)
-                .build()
-        )
-        durum("Çeviri modeli hazırlanıyor (ilk seferde ~30 MB iner)…")
-        cevirmen!!.downloadModelIfNeeded(DownloadConditions.Builder().build())
-            .addOnSuccessListener {
-                modelHazir = true
-                durum("Hazır. Remote Play'e geç; altyazılar okunuyor.")
-            }
-            .addOnFailureListener { durum("Çeviri modeli indirilemedi: ${it.message}") }
-
+        hat = AltyaziHatti(this, ayar, ::ceviriyiGoster, ::durum) { tvHedef() }.also { it.baslat() }
         kaplamalariGoster()
         isciH?.post(dongu)
     }
@@ -221,11 +185,10 @@ class CaptureService : Service() {
         override fun run() {
             if (!Durum.calisiyor) return
             try {
-                if (!mesgul && !duraklat && modelHazir) kareIsle()
+                if (!duraklat && hat?.hazir == true) kareIsle()
                 else okuyucu?.acquireLatestImage()?.close()   // kuyruğu boşalt
             } catch (e: Exception) {
                 durum("Hata: ${e.message}")
-                mesgul = false
             }
             isciH?.postDelayed(this, ayar.aralikMs)
         }
@@ -251,147 +214,45 @@ class CaptureService : Service() {
                 (o.bottom * h).toInt().coerceIn(1, h)
             )
             if (rect.width() < 8 || rect.height() < 8) { tam.recycle(); return }
-            kirpX = rect.left; kirpY = rect.top
+            rect0X = rect.left; rect0Y = rect.top
             kirpik = Bitmap.createBitmap(tam, rect.left, rect.top, rect.width(), rect.height())
             if (kirpik !== tam) tam.recycle()
         } finally {
             img.close()
         }
 
-        mesgul = true
-        tanima!!.process(InputImage.fromBitmap(kirpik, 0))
-            .addOnSuccessListener(isciExec) { sonuc ->
-                val metin = temizle(sonuc)
-                metinGeldi(metin)
-                kirpik.recycle()
-                if (!cevirmeBekliyor) mesgul = false
-            }
-            .addOnFailureListener(isciExec) {
-                kirpik.recycle(); mesgul = false
-            }
+        val h = hat ?: run { kirpik.recycle(); return }
+        val kx = rect0X; val ky = rect0Y
+        val kutu = kutuAlani; val bar = barAlani
+        h.isle(kirpik) { x, y ->
+            // Kendi kaplamalarımızın üstündeki yazıyı okuma
+            kutu?.contains(x + kx, y + ky) == true || bar?.contains(x + kx, y + ky) == true
+        }
     }
 
-    private val isciExec = java.util.concurrent.Executor { komut -> isciH?.post(komut) }
-    @Volatile private var cevirmeBekliyor = false
-    private var kirpX = 0
-    private var kirpY = 0
+    private var rect0X = 0
+    private var rect0Y = 0
     @Volatile private var kutuAlani: Rect? = null     // çeviri kutusunun ekrandaki yeri
     @Volatile private var barAlani: Rect? = null      // kontrol çubuğunun ekrandaki yeri
     private var ornekGosteriliyor = false
-    @Volatile private var sonTr = ""
 
-    private fun normalize(s: String) = s.lowercase().replace(Regex("[^\\p{L}\\p{N}]"), "")
-
-    private fun metinGeldi(metin: String) {
-        val n = normalize(metin)
-        if (n.length < 3) {
-            bosSure += ayar.aralikMs
-            aday = ""; adaySayac = 0
-            if (ekrandaMetinVar && bosSure >= BOS_TEMIZLEME_MS) {
-                ekrandaMetinVar = false
-                sonGonderilen = ""
-                yayinla("", "")
-            }
-            return
+    /** Hattan gelen çeviriyi telefon kaplamasına yazar (ana iş parçacığı). */
+    @Suppress("UNUSED_PARAMETER")
+    private fun ceviriyiGoster(tr: String, orijinal: String) {
+        ceviriKutusu?.let {
+            ornekGosteriliyor = false
+            it.text = tr
+            sigdir()
+            if (tr.isBlank()) { it.visibility = View.GONE; kutuAlani = null }
+            else it.visibility = View.VISIBLE
         }
-        bosSure = 0
-        if (benzerlik(n, sonGonderilen) >= 0.82) return     // aynı altyazı hâlâ ekranda
-
-        // Yazı beliriyor/değişiyorsa bir kare daha bekle (kararlı olsun)
-        if (benzerlik(n, aday) >= 0.9) adaySayac++ else { aday = n; adaySayac = 1 }
-        if (adaySayac < 2) return
-
-        sonGonderilen = n
-        aday = ""; adaySayac = 0
-        cevirmeBekliyor = true
-        if (ayar.cevrimici) {
-            agIsi.execute {
-                val tr = try { cevrimici.cevir(metin) } catch (_: Exception) { null }
-                isciH?.post {
-                    if (tr.isNullOrBlank()) yerelCevir(metin) else ceviriBitti(tr, metin)
-                } ?: run { cevirmeBekliyor = false; mesgul = false }
-            }
-        } else yerelCevir(metin)
-    }
-
-    private fun ceviriBitti(tr: String, orijinal: String) {
-        ekrandaMetinVar = true
-        yayinla(tr, orijinal)
-        cevirmeBekliyor = false; mesgul = false
-    }
-
-    /** Cihazdaki ML Kit çevirisi (internetsiz; çevrimiçi başarısız olursa yedek). */
-    private fun yerelCevir(metin: String) {
-        val c = cevirmen
-        if (c == null) { cevirmeBekliyor = false; mesgul = false; return }
-        c.translate(metin)
-            .addOnSuccessListener(isciExec) { tr -> ceviriBitti(tr, metin) }
-            .addOnFailureListener(isciExec) { cevirmeBekliyor = false; mesgul = false }
-    }
-
-    /**
-     * OCR sonucunu temizler: altyazı olmayan tek harflik parçaları atar.
-     * (Remote Play'in dokunmatik A/B/X/Y düğmeleri "A" okunup "bir" diye çevriliyordu.)
-     */
-    private fun temizle(sonuc: Text): String {
-        val kutu = kutuAlani; val bar = barAlani
-        val satirlar = sonuc.textBlocks.flatMap { it.lines }
-            .filter { s -> s.text.count { it.isLetter() } >= 2 }
-            .filter { s ->
-                // Kendi kaplamalarımızın üstündeki yazıyı okuma
-                val k = s.boundingBox ?: return@filter true
-                val x = k.centerX() + kirpX; val y = k.centerY() + kirpY
-                !(kutu?.contains(x, y) == true || bar?.contains(x, y) == true)
-            }
-        val parcalar = satirlar.joinToString(" ") { it.text }
-            .replace(Regex("\\s+"), " ").trim()
-            .split(" ").filter { it.isNotEmpty() }.toMutableList()
-        fun artik(t: String) = t.length == 1 && t[0].isLetterOrDigit() && t != "I"
-        while (parcalar.isNotEmpty() && artik(parcalar.last())) parcalar.removeAt(parcalar.size - 1)
-        while (parcalar.isNotEmpty() && parcalar.first().length == 1 && parcalar.first()[0] in "BXYbxy")
-            parcalar.removeAt(0)
-        return parcalar.joinToString(" ")
-    }
-
-    private fun yayinla(tr: String, orijinal: String) {
-        val adres = tvHedef()
-        sonTr = tr
-        if (adres.isNotBlank()) tv.gonder(adres, tr, orijinal, ayar.stilJson())
-        ana.post {
-            ceviriKutusu?.let {
-                ornekGosteriliyor = false
-                it.text = tr
-                sigdir()
-                if (tr.isBlank()) { it.visibility = View.GONE; kutuAlani = null }
-                else it.visibility = View.VISIBLE
-            }
-            Durum.sonCeviriDinleyici?.invoke(orijinal, tr)
-        }
-    }
-
-    /** 0..1 arası benzerlik (Levenshtein). */
-    private fun benzerlik(a: String, b: String): Double {
-        if (a.isEmpty() || b.isEmpty()) return if (a == b) 1.0 else 0.0
-        if (a == b) return 1.0
-        val n = a.length; val m = b.length
-        var onceki = IntArray(m + 1) { it }
-        var simdi = IntArray(m + 1)
-        for (i in 1..n) {
-            simdi[0] = i
-            for (j in 1..m) {
-                val k = if (a[i - 1] == b[j - 1]) 0 else 1
-                simdi[j] = minOf(onceki[j] + 1, simdi[j - 1] + 1, onceki[j - 1] + k)
-            }
-            val t = onceki; onceki = simdi; simdi = t
-        }
-        return 1.0 - onceki[m].toDouble() / maxOf(n, m)
     }
 
     // ---------- Telefon kaplamaları ----------
 
     private fun kaplamaParam(w: Int, h: Int, dokunulabilir: Boolean): WindowManager.LayoutParams {
         // FLAG_SECURE yok: ekran görüntüsü alınabilsin. Kendi yazımızı okumamak için
-        // kaplamaların üstüne düşen OCR satırları temizle() içinde atılır.
+        // kaplamaların üstüne düşen OCR satırları AltyaziHatti.isle(atla) ile atılır.
         var bayrak = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
         if (!dokunulabilir) bayrak = bayrak or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
@@ -513,10 +374,7 @@ class CaptureService : Service() {
     /** Boyut, konum, renk ve şeffaflık ayarlarını çeviri kutusuna uygular. */
     private fun stilUygula(ornekGoster: Boolean) {
         // Ayar değişince TV'ye de hemen yansıt (altyazı yoksa 2,5 sn'lik örnek)
-        if (ornekGoster && tvHedef().isNotBlank()) {
-            if (ekrandaMetinVar && sonTr.isNotBlank()) tv.gonder(tvHedef(), sonTr, "", ayar.stilJson())
-            else tv.gonder(tvHedef(), "Örnek altyazı metni", "", ayar.stilJson(), 2500)
-        }
+        if (ornekGoster) hat?.stiliTvyeGonder()
         val k = ceviriKutusu ?: return
         k.textSize = etkinBoyut().toFloat()
         k.setTextColor(ayar.yaziRengi)
@@ -634,13 +492,11 @@ class CaptureService : Service() {
         if (!Durum.calisiyor && projeksiyon == null) { stopSelf(); return }
         Durum.calisiyor = false
         isciH?.removeCallbacksAndMessages(null)
-        if (ekrandaMetinVar) tv.gonder(tvHedef(), "", "")
         try { sanalEkran?.release() } catch (_: Exception) {}
         try { okuyucu?.close() } catch (_: Exception) {}
         try { projeksiyon?.stop() } catch (_: Exception) {}
         sanalEkran = null; okuyucu = null; projeksiyon = null
-        tanima?.close(); cevirmen?.close()
-        tanima = null; cevirmen = null
+        hat?.kapat(); hat = null
         kontrolBar?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         ceviriKap?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         ceviriKap = null
@@ -658,8 +514,6 @@ class CaptureService : Service() {
 
     override fun onDestroy() {
         if (Durum.calisiyor) durdur()
-        tv.kapat()
-        agIsi.shutdown()
         super.onDestroy()
     }
 }
