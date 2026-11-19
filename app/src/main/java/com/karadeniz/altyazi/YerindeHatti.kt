@@ -94,19 +94,19 @@ class YerindeHatti(
     private fun calis(kirpik: Bitmap, bolge: Oran) {
         val t = tanima ?: return
         // Telefon alanı: oyundaki telefon ekranda değilse (harita, oyun) okuma; ekrandaki çeviriyi sil
+        // Telefon algılama: önce bölgedeki açık yüzey oranına bak. Tutmazsa hemen vazgeçme: bölge telefonu tam
+        // kapsamıyor olabilir; yazıların arkası açık yüzeyse (telefon ekranı/balon) yine de telefon sayılır.
+        var supheli = false
+        var tani = ""
         if (alan == Alan.TELEFON && ayar.telefonAlgila) {
             val oran = telefonOrani(kirpik)
             val esik = ayar.telefonEsik / 100f
             // Telefon bir kez algılandıktan sonra eşiğin %60'ına inene dek açık sayılır (titremesin)
             telefonAcik = oran >= (if (telefonAcik) esik * 0.6f else esik)
             if (!telefonAcik) {
-                sonOkunan = "(telefon ekranı algılanmadı: açık yüzey %${(oran * 100).toInt()}, eşik %${ayar.telefonEsik}. " +
-                    "Telefon açıkken de çıkıyorsa Telefon algılama hassasiyetini düşür)"
-                when (takip.gelen("", ayar.aralikMs)) {
-                    Karar.Temizle -> yayinla(emptyList())
-                    else -> {}
-                }
-                return
+                supheli = true
+                tani = "(telefon ekranı algılanmadı: açık yüzey %${(oran * 100).toInt()}, eşik %${ayar.telefonEsik}; " +
+                    "yazıların arkası da açık değil. Telefon açıkken de çıkıyorsa Telefon bölgesini telefonu kapsayacak şekilde düzelt)"
             }
         }
         val sonuc = Tasks.await(t.process(InputImage.fromBitmap(kirpik, 0)))
@@ -126,6 +126,17 @@ class YerindeHatti(
             }
         }.filter { YerindeIsleme.uygunMu(it.metin, min) }
             .sortedWith(compareBy({ it.kutu.ust }, { it.kutu.sol }))
+        if (supheli) {
+            if (bloklar.any { acikArkaMi(it.arka) }) telefonAcik = true
+            else {
+                sonOkunan = tani
+                when (takip.gelen("", ayar.aralikMs)) {
+                    Karar.Temizle -> yayinla(emptyList())
+                    else -> {}
+                }
+                return
+            }
+        }
         sonOkunan = bloklar.joinToString(" | ") { it.metin }
 
         when (val k = takip.gelen(bloklar.joinToString(" | ") { it.metin }, ayar.aralikMs)) {
@@ -141,6 +152,14 @@ class YerindeHatti(
     }
 
     private var telefonAcik = false
+
+    /** Yazının arkası açık ve soluk renkli mi (telefon ekranı, mesaj balonu)? */
+    private fun acikArkaMi(arka: Int?): Boolean {
+        if (arka == null) return false
+        val r = android.graphics.Color.red(arka); val g = android.graphics.Color.green(arka); val b = android.graphics.Color.blue(arka)
+        val enb = maxOf(r, g, b); val enk = minOf(r, g, b)
+        return android.graphics.Color.luminance(arka) >= 0.5f && (enb == 0 || (enb - enk).toFloat() / enb <= 0.30f)
+    }
 
     /** Kırpıktan 48×48 ızgara örnekle: açık, soluk renkli yüzeyin oranı. */
     private fun telefonOrani(bmp: Bitmap): Float {
