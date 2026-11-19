@@ -209,13 +209,13 @@ object YerindeIsleme {
      * Oyundaki telefon ekranda mı? Telefon ekranı açık gri/beyaz (parlak, rengi soluk) geniş bir yüzeydir;
      * harita mavi, oyun dünyası renkli/karanlık. Örnek piksellerin en az [esik] kadarı böyleyse telefon açık sayılır.
      */
-    fun telefonEkraniMi(pikseller: IntArray, esik: Float = 0.30f): Boolean {
+    fun telefonEkraniMi(pikseller: IntArray, esik: Float = 0.15f): Boolean {
         if (pikseller.isEmpty()) return false
         val uygun = pikseller.count { p ->
             val r = (p shr 16) and 0xFF; val g = (p shr 8) and 0xFF; val b = p and 0xFF
             val enb = maxOf(r, g, b); val enk = minOf(r, g, b)
-            val parlak = (r * 299 + g * 587 + b * 114) / 1000 >= 175
-            val soluk = enb == 0 || (enb - enk).toFloat() / enb <= 0.18f
+            val parlak = (r * 299 + g * 587 + b * 114) / 1000 >= 150
+            val soluk = enb == 0 || (enb - enk).toFloat() / enb <= 0.22f
             parlak && soluk
         }
         return uygun.toFloat() / pikseller.size >= esik

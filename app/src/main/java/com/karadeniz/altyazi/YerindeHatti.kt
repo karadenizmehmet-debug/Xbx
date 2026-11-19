@@ -93,7 +93,7 @@ class YerindeHatti(
         val t = tanima ?: return
         // Telefon alanı: oyundaki telefon ekranda değilse (harita, oyun) okuma; ekrandaki çeviriyi sil
         if (alan == Alan.TELEFON && ayar.telefonAlgila && !telefonGorunuyor(kirpik)) {
-            sonOkunan = "(telefon ekranı görünmüyor)"
+            sonOkunan = "(telefon ekranı görünmüyor; telefon açıksa Görünüm > Telefon alanı'nı kapat)"
             when (takip.gelen("", ayar.aralikMs)) {
                 Karar.Temizle -> yayinla(emptyList())
                 else -> {}

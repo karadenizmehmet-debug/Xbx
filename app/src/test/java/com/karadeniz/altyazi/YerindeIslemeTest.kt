@@ -61,8 +61,10 @@ class YerindeIslemeTest {
         val beyaz = 0xFFEDEDF2.toInt(); val mavi = 0xFF1E5AC8.toInt(); val koyu = 0xFF202830.toInt()
         // Telefon: yarısı açık gri ekran
         assertTrue(YerindeIsleme.telefonEkraniMi(IntArray(100) { if (it < 50) beyaz else koyu }))
+        // Bölgenin küçük bir kısmını kaplayan telefon (%20) yine algılanır
+        assertTrue(YerindeIsleme.telefonEkraniMi(IntArray(100) { if (it < 20) beyaz else koyu }))
         // Harita: mavi ağırlıklı, birkaç beyaz yazı
-        assertFalse(YerindeIsleme.telefonEkraniMi(IntArray(100) { if (it < 10) beyaz else mavi }))
+        assertFalse(YerindeIsleme.telefonEkraniMi(IntArray(100) { if (it < 8) beyaz else mavi }))
         assertFalse(YerindeIsleme.telefonEkraniMi(IntArray(0)))
     }
 }
