@@ -195,20 +195,34 @@ class YerindeHatti(
         return android.graphics.Color.rgb(orta(rs), orta(gs), orta(bs))
     }
 
+    /**
+     * Önbellekte olmayanları tek istekte, ekrandaki sırayla çevir (konuşma bağlamı korunur).
+     * Toplu istek tutmazsa her biri tek tek çevrilir.
+     */
+    private fun topluCevir(metinler: List<String>) {
+        val eksik = metinler.distinct().filter { it !in onbellek }
+        if (eksik.size < 2 || !ayar.cevrimici) return
+        val sonuc = try { cevrimici.cevirToplu(eksik.map { CeviriBicim.duzelt(it) }) } catch (_: Exception) { null } ?: return
+        eksik.forEachIndexed { i, m -> onbellek[m] = CeviriBicim.geriBuyut(m, sonuc[i]) }
+    }
+
     private fun cevir(metin: String): String {
         onbellek[metin]?.let { return it }
-        val tr = (if (ayar.cevrimici) try { cevrimici.cevir(metin) } catch (_: Exception) { null } else null)
+        val girdi = CeviriBicim.duzelt(metin)
+        val tr = (if (ayar.cevrimici) try { cevrimici.cevir(girdi) } catch (_: Exception) { null } else null)
             ?.takeIf { it.isNotBlank() }
-            ?: cevirmen?.let { try { Tasks.await(it.translate(metin)) } catch (_: Exception) { null } }
+            ?: cevirmen?.let { try { Tasks.await(it.translate(girdi)) } catch (_: Exception) { null } }
             ?: metin
-        onbellek[metin] = tr
-        return tr
+        val son = CeviriBicim.geriBuyut(metin, tr)
+        onbellek[metin] = son
+        return son
     }
 
     private fun yayinla(bloklar: List<Blok>) {
         if (kapandi) return
         yayinda = bloklar
         sonGonderim = SystemClock.elapsedRealtime()
+        topluCevir(bloklar.map { it.metin })
         val ceviriler = bloklar.map { b -> cevir(b.metin).let { if (ayar.sansur) Sansur.temizle(it) else it } }
         sonCeviriler = ceviriler
         val dizi = JSONArray()
