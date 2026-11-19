@@ -51,4 +51,15 @@ class MetinIslemeTest {
         assertEquals(Karar.Bekle, t.gelen("Hello there", 400))
         assertEquals(Karar.Cevir("Hello there"), t.gelen("Hello there", 400))
     }
+
+    @Test fun kararlilik_zorlaTemizle_yalnizcaGosterimVarkenTrue() {
+        val t = KararlilikTakip()
+        assertEquals(false, t.zorlaTemizle())
+        t.gelen("Hello there", 400); t.gelen("Hello there", 400)
+        t.ceviriGosterildi()
+        assertEquals(true, t.zorlaTemizle())
+        assertEquals(false, t.zorlaTemizle())
+        assertEquals(Karar.Bekle, t.gelen("Hello there", 400))
+        assertEquals(Karar.Cevir("Hello there"), t.gelen("Hello there", 400))
+    }
 }
