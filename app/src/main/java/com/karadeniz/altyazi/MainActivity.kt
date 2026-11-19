@@ -181,6 +181,7 @@ class MainActivity : AppCompatActivity() {
         kok.addView(tvKarti())
         kok.addView(secenekKarti())
         kok.addView(sozlukKarti())
+        kok.addView(denemeKarti())
         kok.addView(gorunumKarti())
         kok.addView(aralikKarti())
         kok.addView(kullanimKarti())
@@ -424,6 +425,68 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var sozlukDugmesi: MaterialButton? = null
+
+    /** Deneme: Xbox bağlı olmadan TV'de altyazı / telefon / bildirim görünümünü örnek metinle gösterir. */
+    private fun denemeKarti(): View {
+        fun adres(): String? {
+            ayar.tvAdresi = tvAlan.text.toString()
+            return ayar.tvAdresi.takeIf { it.isNotBlank() } ?: run { kisa("Önce TV'yi seç ya da adresini yaz."); null }
+        }
+        fun altyazi() { adres()?.let { tv.gonder(it, Deneme.ALTYAZI_METNI, "", ayar.stilJson(), 15000) } }
+        fun telefon() {
+            adres()?.let { tv.gonderBloklar(it, Alan.TELEFON.id, Deneme.telefon(ayar.alanBolge(Alan.TELEFON), ayar.alanBoyut(Alan.TELEFON) / 100.0), ayar.stilJson()) }
+        }
+        fun bildirim() {
+            adres()?.let { tv.gonderBloklar(it, Alan.BILDIRIM.id, Deneme.bildirim(ayar.alanBolge(Alan.BILDIRIM), ayar.alanBoyut(Alan.BILDIRIM) / 100.0), ayar.stilJson()) }
+        }
+        fun temizle() {
+            val a = ayar.tvAdresi
+            if (a.isBlank()) return
+            tv.gonder(a, "", "")
+            tv.gonderBloklar(a, Alan.TELEFON.id, org.json.JSONArray(), null)
+            tv.gonderBloklar(a, Alan.BILDIRIM.id, org.json.JSONArray(), null)
+        }
+        fun dugme(ad: String, dolu: Boolean, tik: () -> Unit) =
+            (if (dolu) MaterialButton(this) else MaterialButton(this, null, MR.attr.materialButtonOutlinedStyle)).apply {
+                text = ad
+                setOnClickListener { tik() }
+            }
+        fun satir(vararg d: View) = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            d.forEachIndexed { i, v ->
+                addView(v, LinearLayout.LayoutParams(0, -2, 1f).apply { if (i > 0) marginStart = dp(8) })
+            }
+        }
+        fun boyutKaydirici(a: Alan): View {
+            val baslik = yazi("", 13f)
+            fun yaz(n: Int) { baslik.text = "${a.ad} çeviri boyutu: %$n" }
+            yaz(ayar.alanBoyut(a))
+            val k = Slider(this).apply {
+                valueFrom = 80f; valueTo = 250f; stepSize = 5f
+                value = ayar.alanBoyut(a).toFloat().coerceIn(80f, 250f)
+                addOnChangeListener { _, v, kullanici ->
+                    if (!kullanici) return@addOnChangeListener
+                    ayar.alanBoyutYaz(a, v.toInt()); yaz(v.toInt())
+                    if (a == Alan.TELEFON) telefon() else bildirim()
+                }
+            }
+            return LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, dp(10), 0, 0)
+                addView(baslik); addView(k)
+            }
+        }
+        return kart(
+            yuzey(),
+            baslik("Deneme", "Xbox bağlı olmadan TV'de nasıl göründüğüne bak (TV uygulaması açık olmalı)"),
+            satir(dugme("Altyazı", true) { altyazi() }, dugme("Telefon", true) { telefon() }, dugme("Bildirim", true) { bildirim() }),
+            ust(satir(dugme("Hepsini göster", false) { altyazi(); telefon(); bildirim() }, dugme("Temizle", false) { temizle() }), 8),
+            boyutKaydirici(Alan.TELEFON),
+            boyutKaydirici(Alan.BILDIRIM),
+            yazi("Örnekler okuma bölgelerine yerleşir; yazı tipi, renk ve TV hizalaması ayarları uygulanır. Örnek TV'de 15–20 sn kalır.", 12f, soluk = true)
+                .apply { setPadding(0, dp(10), 0, 0) }
+        )
+    }
 
     /** Başlık + açıklama solda, anahtar sağda. Anahtar satırın `tag`'inde. */
     private fun anahtar(
