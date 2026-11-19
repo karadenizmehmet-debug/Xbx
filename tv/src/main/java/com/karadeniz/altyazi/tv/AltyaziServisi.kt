@@ -329,6 +329,10 @@ class AltyaziServisi : Service() {
             if (metin.isBlank()) continue
             val kt = b.optJSONArray("kutu") ?: continue
             val tek = b.optBoolean("tek", false)
+            val aci = b.optDouble("aci", 0.0).toFloat()
+            // Orijinalden örneklenen renkler (yoksa telefondaki stil renkleri)
+            val blokArka = if (b.has("arka")) b.optInt("arka") else arka
+            val blokYazi = if (b.has("yazi")) b.optInt("yazi") else yaziRengi
             // Orijinal yazının kenarları da örtülsün diye kutu her yönden biraz (yüksekliğin %12'si) büyür
             val ham = arrayOf(x(kt.optDouble(0)), y(kt.optDouble(1)), x(kt.optDouble(2)), y(kt.optDouble(3)))
             val pay = (ham[3] - ham[1]) * 0.12
@@ -338,12 +342,13 @@ class AltyaziServisi : Service() {
             val dolgu = (kh * 0.08f).toInt().coerceAtLeast(1)
             val t = TextView(this).apply {
                 typeface = tip
-                setTextColor(yaziRengi)
+                setTextColor(blokYazi)
                 gravity = if (tek) Gravity.CENTER else Gravity.CENTER_VERTICAL or Gravity.START
+                rotation = aci   // orijinal yazının eğikliği (oyundaki telefon yan duruyor)
                 setPadding(dolgu, 0, dolgu, 0)
                 includeFontPadding = false
-                background = GradientDrawable().apply { cornerRadius = kh * 0.18f; setColor(arka) }
-                if (tek) { maxLines = 1; isSingleLine = true } else minHeight = kh
+                background = GradientDrawable().apply { cornerRadius = kh * 0.12f; setColor(blokArka) }
+                if (tek) { maxLines = 1; isSingleLine = true }
             }
             val boya = TextPaint(t.paint).apply { typeface = tip }
             val ic = (kw - dolgu * 2).coerceAtLeast(1)
@@ -361,13 +366,15 @@ class AltyaziServisi : Service() {
                 boyut = (kh * 0.6f).coerceAtMost(h * 0.05f).coerceAtLeast(enAz)
                 while (boyut > enAz) {
                     boya.textSize = boyut
-                    if (StaticLayout.Builder.obtain(metin, 0, metin.length, boya, ic).build().height <= kh) break
-                    boyut -= 1f
+                    if (StaticLayout.Builder.obtain(metin, 0, metin.length, boya, ic)
+                            .setIncludePad(false).build().height <= kh - 2) break
+                    boyut -= 0.5f
                 }
             }
             t.setTextSize(TypedValue.COMPLEX_UNIT_PX, boyut)
             t.text = metin
-            katman.addView(t, FrameLayout.LayoutParams(kw, if (tek) kh else -2).apply { leftMargin = l; topMargin = u })
+            // Kutu orijinalle aynı boyda: yazı sığana kadar küçülür, kutu uzamaz
+            katman.addView(t, FrameLayout.LayoutParams(kw, kh).apply { leftMargin = l; topMargin = u })
         }
         val gizleyici = Runnable { katman.removeAllViews() }
         alanGizleyiciler[id] = gizleyici

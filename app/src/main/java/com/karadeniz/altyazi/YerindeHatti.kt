@@ -93,18 +93,15 @@ class YerindeHatti(
         val t = tanima ?: return
         val sonuc = Tasks.await(t.process(InputImage.fromBitmap(kirpik, 0)))
         val min = ayar.minKelime(alan)
-        fun kutu(r: android.graphics.Rect) = YerindeIsleme.kirpiktanVideoya(
-            Oran(r.left.toFloat(), r.top.toFloat(), r.right.toFloat(), r.bottom.toFloat()), kirpik.width, kirpik.height, bolge
-        )
         val bloklar = sonuc.textBlocks.flatMap { b ->
-            val satirlar = b.lines.mapNotNull { l -> satirKutusu(l)?.let { YerindeIsleme.dugmeleriAt(l.text) to it } }
-                .filter { it.first.isNotBlank() }
-            if (YerindeIsleme.satirSatirMi(satirlar.map { it.first }) || (satirlar.size == 1 && b.lines.size == 1)) {
+            val satirlar = b.lines.filter { YerindeIsleme.dugmeleriAt(it.text).isNotBlank() }
+            val metinler = satirlar.map { YerindeIsleme.dugmeleriAt(it.text) }
+            if (YerindeIsleme.satirSatirMi(metinler) || (satirlar.size == 1 && b.lines.size == 1)) {
                 // Kumanda ipuçları gibi kısa satırlar: her satır kendi yerine, düğme simgesi açıkta kalır
-                satirlar.map { (m, r) -> Blok(m, kutu(r), tekSatir = true) }
+                satirlar.mapIndexedNotNull { i, l -> satirKoseleri(l)?.let { blokYap(metinler[i], it, kirpik, bolge, true) } }
             } else {
-                val k = b.boundingBox ?: return@flatMap emptyList()
-                listOf(Blok(satirlar.joinToString(" ") { it.first }.replace(Regex("\\s+"), " ").trim(), kutu(k)))
+                val k = koseler(b.cornerPoints, b.boundingBox) ?: return@flatMap emptyList()
+                listOf(blokYap(metinler.joinToString(" ").replace(Regex("\\s+"), " ").trim(), k, kirpik, bolge, false))
             }
         }.filter { YerindeIsleme.uygunMu(it.metin, min) }
             .sortedWith(compareBy({ it.kutu.ust }, { it.kutu.sol }))
@@ -122,12 +119,57 @@ class YerindeHatti(
         }
     }
 
-    /** Satırın kutusu, düğme simgesi ("RB", "(L)") hariç: yalnızca yazı kelimelerinin birleşimi. */
-    private fun satirKutusu(l: com.google.mlkit.vision.text.Text.Line): android.graphics.Rect? {
-        val kelimeler = l.elements.filter { !YerindeIsleme.dugmeMi(it.text) }.mapNotNull { it.boundingBox }
-        if (kelimeler.isEmpty()) return l.boundingBox
-        return android.graphics.Rect(kelimeler.minOf { it.left }, kelimeler.minOf { it.top },
-            kelimeler.maxOf { it.right }, kelimeler.maxOf { it.bottom })
+    /** Köşe noktaları (x[4], y[4]); yoksa düz kutudan. */
+    private fun koseler(p: Array<android.graphics.Point>?, r: android.graphics.Rect?): Pair<FloatArray, FloatArray>? {
+        if (p != null && p.size == 4) return FloatArray(4) { p[it].x.toFloat() } to FloatArray(4) { p[it].y.toFloat() }
+        r ?: return null
+        return floatArrayOf(r.left.toFloat(), r.right.toFloat(), r.right.toFloat(), r.left.toFloat()) to
+            floatArrayOf(r.top.toFloat(), r.top.toFloat(), r.bottom.toFloat(), r.bottom.toFloat())
+    }
+
+    /** Satırın köşeleri, düğme simgesi ("RB", "(L)") hariç: ilk ve son yazı kelimesinin köşelerinden. */
+    private fun satirKoseleri(l: com.google.mlkit.vision.text.Text.Line): Pair<FloatArray, FloatArray>? {
+        val kel = l.elements.filter { !YerindeIsleme.dugmeMi(it.text) && it.cornerPoints?.size == 4 }
+        if (kel.isEmpty()) return koseler(l.cornerPoints, l.boundingBox)
+        val ilk = kel.first().cornerPoints!!; val son = kel.last().cornerPoints!!
+        return floatArrayOf(ilk[0].x.toFloat(), son[1].x.toFloat(), son[2].x.toFloat(), ilk[3].x.toFloat()) to
+            floatArrayOf(ilk[0].y.toFloat(), son[1].y.toFloat(), son[2].y.toFloat(), ilk[3].y.toFloat())
+    }
+
+    /** Eğik kutu + orijinalden örneklenen arka plan rengi (yazının hemen çevresi) ve okunur yazı rengi. */
+    private fun blokYap(metin: String, k: Pair<FloatArray, FloatArray>, bmp: Bitmap, bolge: Oran, tek: Boolean): Blok {
+        val e = YerindeIsleme.egikKutu(k.first, k.second)
+        val arka = renkOrnekle(bmp, e)
+        val parlak = android.graphics.Color.luminance(arka) > 0.5f
+        return Blok(
+            metin, YerindeIsleme.kirpiktanVideoya(e.kutu, bmp.width, bmp.height, bolge), tek, e.aci,
+            arka, if (parlak) android.graphics.Color.rgb(20, 20, 20) else android.graphics.Color.WHITE
+        )
+    }
+
+    /** Yazı kutusunun biraz dışındaki halkadan 32 nokta; kanal başına ortanca (yazı pikselleri karışmasın). */
+    private fun renkOrnekle(bmp: Bitmap, e: EgikKutu): Int {
+        val cx = (e.kutu.sol + e.kutu.sag) / 2; val cy = (e.kutu.ust + e.kutu.alt) / 2
+        val boy = e.kutu.alt - e.kutu.ust
+        val yw = (e.kutu.sag - e.kutu.sol) / 2 + boy * 0.3f; val yh = boy / 2 + boy * 0.3f
+        val r = Math.toRadians(e.aci.toDouble()); val c = Math.cos(r).toFloat(); val sn = Math.sin(r).toFloat()
+        val rs = ArrayList<Int>(); val gs = ArrayList<Int>(); val bs = ArrayList<Int>()
+        for (i in 0 until 32) {
+            val t = i / 32f * 4f
+            val (dx, dy) = when {
+                t < 1f -> (-yw + 2 * yw * t) to -yh
+                t < 2f -> yw to (-yh + 2 * yh * (t - 1f))
+                t < 3f -> (yw - 2 * yw * (t - 2f)) to yh
+                else -> -yw to (yh - 2 * yh * (t - 3f))
+            }
+            val x = (cx + dx * c - dy * sn).toInt(); val y = (cy + dx * sn + dy * c).toInt()
+            if (x !in 0 until bmp.width || y !in 0 until bmp.height) continue
+            val p = bmp.getPixel(x, y)
+            rs.add(android.graphics.Color.red(p)); gs.add(android.graphics.Color.green(p)); bs.add(android.graphics.Color.blue(p))
+        }
+        if (rs.isEmpty()) return android.graphics.Color.BLACK
+        fun orta(l: ArrayList<Int>) = l.sorted()[l.size / 2]
+        return android.graphics.Color.rgb(orta(rs), orta(gs), orta(bs))
     }
 
     private fun cevir(metin: String): String {
@@ -148,7 +190,10 @@ class YerindeHatti(
         sonCeviriler = ceviriler
         val dizi = JSONArray()
         bloklar.forEachIndexed { i, b ->
-            dizi.put(JSONObject().put("text", ceviriler[i]).put("tek", b.tekSatir).put("kutu", JSONArray()
+            val o = JSONObject().put("text", ceviriler[i]).put("tek", b.tekSatir).put("aci", b.aci.toDouble())
+            if (b.arka != null) o.put("arka", b.arka)
+            if (b.yazi != null) o.put("yazi", b.yazi)
+            dizi.put(o.put("kutu", JSONArray()
                 .put(b.kutu.sol.toDouble()).put(b.kutu.ust.toDouble())
                 .put(b.kutu.sag.toDouble()).put(b.kutu.alt.toDouble())))
         }

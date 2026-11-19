@@ -156,8 +156,17 @@ enum class Alan(val id: String, val ad: String, val minKelimeVarsayilan: Int) {
 }
 
 /** Yerinde çevrilecek bir yazı bloğu: metin ve videodaki yeri (0..1). */
-/** [tekSatir]: kısa komut satırı; TV'de tek satıra sığdırılır, kutu orijinalle aynı boyda kalır. */
-data class Blok(val metin: String, val kutu: Oran, val tekSatir: Boolean = false)
+/**
+ * [kutu]: yazının döndürülmemiş hali (merkezi ve boyu doğru), video oranı. [aci]: derece; TV kutuyu merkezinden bu kadar döndürür.
+ * [tekSatir]: kısa komut satırı, tek satıra sığdırılır. [arka]/[yazi]: orijinalden örneklenen renkler (null = stil rengi).
+ */
+data class Blok(
+    val metin: String, val kutu: Oran, val tekSatir: Boolean = false,
+    val aci: Float = 0f, val arka: Int? = null, val yazi: Int? = null
+)
+
+/** Dört köşeden (sol-üst, sağ-üst, sağ-alt, sol-alt) döndürülmemiş kutu ve açı. */
+data class EgikKutu(val kutu: Oran, val aci: Float)
 
 object YerindeIsleme {
     /** En az [minKelime] gerçek kelime (2+ harf) içeren blok çevrilir; menü adları ve HUD sayıları elenir. */
@@ -195,6 +204,15 @@ object YerindeIsleme {
      */
     fun satirSatirMi(satirlar: List<String>): Boolean =
         satirlar.size > 1 && satirlar.all { Regex("\\p{L}{2,}").findAll(it).count() <= 3 && !it.trimEnd().endsWith(",") }
+
+    /** ML Kit köşe noktalarından eğik kutu: merkez, en (üst kenar), boy (sol kenar) ve üst kenarın açısı. */
+    fun egikKutu(x: FloatArray, y: FloatArray): EgikKutu {
+        val cx = x.average().toFloat(); val cy = y.average().toFloat()
+        val en = Math.hypot((x[1] - x[0]).toDouble(), (y[1] - y[0]).toDouble()).toFloat()
+        val boy = Math.hypot((x[3] - x[0]).toDouble(), (y[3] - y[0]).toDouble()).toFloat()
+        val aci = Math.toDegrees(Math.atan2((y[1] - y[0]).toDouble(), (x[1] - x[0]).toDouble())).toFloat()
+        return EgikKutu(Oran(cx - en / 2, cy - boy / 2, cx + en / 2, cy + boy / 2), aci)
+    }
 
     /** OCR kutusu (kırpık pikseli) → video oranı. */
     fun kirpiktanVideoya(kutu: Oran, kirpikG: Int, kirpikY: Int, bolge: Oran): Oran {

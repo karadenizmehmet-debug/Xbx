@@ -39,4 +39,21 @@ class YerindeIslemeTest {
         assertFalse(YerindeIsleme.satirSatirMi(listOf("Hey, are you coming to the party", "tonight or not?")))
         assertFalse(YerindeIsleme.satirSatirMi(listOf("Mission passed")))
     }
+
+    @Test fun egikKutuAciVeBoyutVerir() {
+        val duz = YerindeIsleme.egikKutu(floatArrayOf(0f, 100f, 100f, 0f), floatArrayOf(0f, 0f, 20f, 20f))
+        assertEquals(0f, duz.aci, 1e-3f)
+        assertEquals(0f, duz.kutu.sol, 1e-3f); assertEquals(100f, duz.kutu.sag, 1e-3f)
+        assertEquals(20f, duz.kutu.alt - duz.kutu.ust, 1e-3f)
+        // 10° eğik: üst kenar sağa doğru aşağı iniyor
+        val r = Math.toRadians(10.0)
+        val c = Math.cos(r).toFloat(); val sn = Math.sin(r).toFloat()
+        val egik = YerindeIsleme.egikKutu(
+            floatArrayOf(0f, 100f * c, 100f * c - 20f * sn, -20f * sn),
+            floatArrayOf(0f, 100f * sn, 100f * sn + 20f * c, 20f * c)
+        )
+        assertEquals(10f, egik.aci, 1e-2f)
+        assertEquals(100f, egik.kutu.sag - egik.kutu.sol, 1e-2f)
+        assertEquals(20f, egik.kutu.alt - egik.kutu.ust, 1e-2f)
+    }
 }
