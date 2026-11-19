@@ -347,6 +347,7 @@ class UzaktanOynatActivity : AppCompatActivity() {
         sonKareZamani = SystemClock.elapsedRealtime()
         if (base64Jpeg.isEmpty() || base64Jpeg.length > EN_COK_BASE64) return
         sonKareB64 = base64Jpeg
+        sonHata = ""   // kare geliyorsa önceki geçici hata artık geçerli değil
         val h = hat ?: return
         if (!h.hazir) return
         val bayt = try { Base64.decode(base64Jpeg, Base64.DEFAULT) } catch (_: Exception) { return }

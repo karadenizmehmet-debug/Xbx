@@ -35,26 +35,39 @@ class BolgeSecici(
     init {
         kok.addView(cizim, FrameLayout.LayoutParams(-1, -1))
 
+        // Üst panel: başlık ayrı satırda, düğmeler altta eşit genişlikte (dar ekranda kesilmesin)
         val ust = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color.argb(200, 0, 0, 0))
-            setPadding(24, 12, 24, 12)
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.argb(215, 0, 0, 0))
+            val d = ctx.resources.displayMetrics.density
+            setPadding((16 * d).toInt(), (10 * d).toInt(), (16 * d).toInt(), (10 * d).toInt())
         }
         ust.addView(TextView(ctx).apply {
-            text = "$baslikYazi  "
+            text = baslikYazi
             setTextColor(Color.WHITE)
-            textSize = 14f
+            textSize = 15f
         })
-        ust.addView(Button(ctx).apply {
+        ust.addView(TextView(ctx).apply {
+            text = "Yeni alan için boş yerde sürükle · Taşımak için kutunun içinden sürükle"
+            setTextColor(Color.argb(190, 255, 255, 255))
+            textSize = 12f
+        })
+        val dugmeler = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+        dugmeler.addView(Button(ctx).apply {
             text = "Kaydet"
+            isAllCaps = false
             setOnClickListener { kapat(); bitti(cizim.bolgeOran()) }
-        })
-        ust.addView(Button(ctx).apply {
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        dugmeler.addView(Button(ctx).apply {
             text = "İptal"
+            isAllCaps = false
             setOnClickListener { kapat(); bitti(null) }
-        })
-        kok.addView(ust, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL))
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        ust.addView(dugmeler)
+        // Durum çubuğunun altında başlasın
+        val id = ctx.resources.getIdentifier("status_bar_height", "dimen", "android")
+        val durumCubugu = if (id > 0) ctx.resources.getDimensionPixelSize(id) else 0
+        kok.addView(ust, FrameLayout.LayoutParams(-1, -2, Gravity.TOP).apply { topMargin = durumCubugu })
     }
 
     fun goster() {
@@ -82,6 +95,9 @@ class BolgeSecici(
         }
         private var bx = 0f
         private var by = 0f
+        /** Dokunuş kutunun içinden başladıysa kutu taşınır, dışından başladıysa yeni kutu çizilir. */
+        private var tasiniyor = false
+        private var ilkOran = RectF()
 
         fun bolgeOran(): RectF = RectF(oran)
 
@@ -99,8 +115,18 @@ class BolgeSecici(
         override fun onTouchEvent(e: MotionEvent): Boolean {
             val w = width.toFloat().coerceAtLeast(1f); val h = height.toFloat().coerceAtLeast(1f)
             when (e.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { bx = e.x; by = e.y }
-                MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP -> {
+                MotionEvent.ACTION_DOWN -> {
+                    bx = e.x; by = e.y
+                    ilkOran = RectF(oran)
+                    tasiniyor = RectF(oran.left * w, oran.top * h, oran.right * w, oran.bottom * h).contains(e.x, e.y)
+                }
+                MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP -> if (tasiniyor) {
+                    // Boyutu koruyarak taşı, ekran dışına taşmasın
+                    val dx = ((e.x - bx) / w).coerceIn(-ilkOran.left, 1f - ilkOran.right)
+                    val dy = ((e.y - by) / h).coerceIn(-ilkOran.top, 1f - ilkOran.bottom)
+                    oran = RectF(ilkOran.left + dx, ilkOran.top + dy, ilkOran.right + dx, ilkOran.bottom + dy)
+                    invalidate()
+                } else {
                     val l = minOf(bx, e.x) / w; val r = maxOf(bx, e.x) / w
                     val t = minOf(by, e.y) / h; val b = maxOf(by, e.y) / h
                     if (r - l > 0.03f && b - t > 0.02f) {
