@@ -108,6 +108,27 @@ class Ayarlar(private val context: Context) {
             .putFloat("bl", r.left).putFloat("bt", r.top)
             .putFloat("br", r.right).putFloat("bb", r.bottom)
             .apply()
+
+    /** Uygulama içi modda altyazı bölgesi: video karesinin oranı (0..1). */
+    var webBolge: Oran
+        get() = Oran(
+            p.getFloat("wl", 0.10f), p.getFloat("wt", 0.72f),
+            p.getFloat("wr", 0.90f), p.getFloat("wb", 0.95f)
+        )
+        set(r) = p.edit()
+            .putFloat("wl", r.sol).putFloat("wt", r.ust)
+            .putFloat("wr", r.sag).putFloat("wb", r.alt)
+            .apply()
+
+    /** Uygulama içi modda oyun sesi telefondan gelsin mi? */
+    var webSes: Boolean
+        get() = p.getBoolean("webSes", true)
+        set(v) = p.edit().putBoolean("webSes", v).apply()
+
+    /** Bağlantı modu: "web" = uygulama içinde, "ekran" = Xbox uygulaması + ekran kaydı. */
+    var mod: String
+        get() = p.getString("mod", "web") ?: "web"
+        set(v) = p.edit().putString("mod", v).apply()
 }
 
 /** Servis ile ekran arasında basit mesajlaşma (aynı süreç). */

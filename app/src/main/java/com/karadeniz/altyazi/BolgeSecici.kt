@@ -25,6 +25,8 @@ class BolgeSecici(
     private val wm: WindowManager,
     baslangic: RectF,
     private val baslikYazi: String,
+    /** Servisten: TYPE_APPLICATION_OVERLAY; bir Activity içinden: TYPE_APPLICATION. */
+    private val pencereTipi: Int = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
     private val bitti: (RectF?) -> Unit
 ) {
     private val kok = FrameLayout(ctx)
@@ -59,7 +61,7 @@ class BolgeSecici(
         val lp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            pencereTipi,
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
