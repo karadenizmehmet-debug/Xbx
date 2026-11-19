@@ -264,13 +264,17 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { baslatDurdur() }
         }
         baslatDugme.layoutParams = LinearLayout.LayoutParams(-1, dp(56)).apply { topMargin = dp(14) }
+        val modSecimi = pillGrubu(
+            listOf("web" to "Uygulama içinde bağlan", "ekran" to "Xbox uygulamasıyla (ekran kaydı)"),
+            ayar.mod, esit = true, tipli = false
+        ) { ayar.mod = it }
         sonYazi = yazi("", 14f).apply {
             setTextColor(yaziRengi)
             visibility = View.GONE
             setPadding(dp(14), dp(12), dp(14), dp(12))
             background = yuvarlak(ColorUtils.setAlphaComponent(renk(MR.attr.colorSurface), 170), 14)
         }
-        return kart(renk(MR.attr.colorPrimaryContainer), durumSatiri, baslatDugme, ust(sonYazi, 12))
+        return kart(renk(MR.attr.colorPrimaryContainer), durumSatiri, ust(modSecimi, 14), baslatDugme, ust(sonYazi, 12))
     }
 
     private fun tvKarti(): View {
@@ -592,6 +596,11 @@ class MainActivity : AppCompatActivity() {
         ayar.tvAdresi = tvAlan.text.toString()
         if (Durum.calisiyor) {
             startService(Intent(this, CaptureService::class.java).setAction(CaptureService.EYLEM_DURDUR))
+            return
+        }
+        if (ayar.mod == "web") {
+            // Uygulama içi Remote Play: ekran kaydı ve üstte gösterme izni gerekmez
+            startActivity(Intent(this, UzaktanOynatActivity::class.java))
             return
         }
         if (!Settings.canDrawOverlays(this)) {
