@@ -145,3 +145,39 @@ object Sansur {
             if (kufurMu(w)) w.first() + "*".repeat(w.length - 1) else w
         }
 }
+
+/** Çevrilen ekran alanları. Altyazı tek metin olarak kendi kutusunda; diğerleri yerinde (orijinalin üstünde). */
+enum class Alan(val id: String, val ad: String, val minKelimeVarsayilan: Int) {
+    ALTYAZI("altyazi", "Altyazı", 1),
+    TELEFON("telefon", "Telefon", 3),
+    BILDIRIM("bildirim", "Bildirim", 2);
+
+    companion object { fun bul(id: String): Alan? = entries.firstOrNull { it.id == id } }
+}
+
+/** Yerinde çevrilecek bir yazı bloğu: metin ve videodaki yeri (0..1). */
+data class Blok(val metin: String, val kutu: Oran)
+
+object YerindeIsleme {
+    /** En az [minKelime] gerçek kelime (2+ harf) içeren blok çevrilir; menü adları ve HUD sayıları elenir. */
+    fun uygunMu(metin: String, minKelime: Int): Boolean =
+        Regex("\\p{L}{2,}").findAll(metin).count() >= minKelime
+
+    /** OCR kutusu (kırpık pikseli) → video oranı. */
+    fun kirpiktanVideoya(kutu: Oran, kirpikG: Int, kirpikY: Int, bolge: Oran): Oran {
+        val g = kirpikG.coerceAtLeast(1).toFloat(); val y = kirpikY.coerceAtLeast(1).toFloat()
+        val bw = bolge.sag - bolge.sol; val bh = bolge.alt - bolge.ust
+        return Oran(
+            bolge.sol + (kutu.sol / g).coerceIn(0f, 1f) * bw, bolge.ust + (kutu.ust / y).coerceIn(0f, 1f) * bh,
+            bolge.sol + (kutu.sag / g).coerceIn(0f, 1f) * bw, bolge.ust + (kutu.alt / y).coerceIn(0f, 1f) * bh
+        )
+    }
+
+    /** Aynı metinli bloklardan biri [esik]ten fazla kaydıysa true (TV'deki kutular yeniden konumlanmalı). */
+    fun kaydiMi(eski: List<Blok>, yeni: List<Blok>, esik: Float = 0.015f): Boolean {
+        if (eski.size != yeni.size) return true
+        return eski.zip(yeni).any { (a, b) ->
+            Math.abs(a.kutu.sol - b.kutu.sol) > esik || Math.abs(a.kutu.ust - b.kutu.ust) > esik
+        }
+    }
+}

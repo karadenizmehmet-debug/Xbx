@@ -232,6 +232,14 @@ class AltyaziServisi : Service() {
             return 503 to "{\"ok\":false,\"hata\":\"katman izni yok\"}"
         }
         val j = JSONObject(if (govde.isBlank()) "{}" else govde)
+        // Yerinde çeviri (Telefon, Bildirim): her blok kendi kutusunda, orijinalin üstüne
+        val bloklar = j.optJSONArray("bloklar")
+        if (bloklar != null) {
+            val id = j.optString("id", "blok")
+            val stilB = j.optJSONObject("stil")
+            ana.post { bloklariGoster(id, bloklar, stilB) }
+            return 200 to "{\"ok\":true}"
+        }
         val metin = j.optString("text", "")
         val stil = j.optJSONObject("stil")
         val sure = j.optLong("sure", 0L)
@@ -281,6 +289,71 @@ class AltyaziServisi : Service() {
             else -> Typeface.DEFAULT
         } ?: Typeface.DEFAULT
     } catch (_: Exception) { Typeface.DEFAULT }
+
+    /** Alan kimliği → o alanın blok katmanı ve güvenlik gizleyicisi. */
+    private val alanKatmanlari = mutableMapOf<String, FrameLayout>()
+    private val alanGizleyiciler = mutableMapOf<String, Runnable>()
+
+    /**
+     * Her bloğu ekranın aynı oranındaki yerine, İngilizcesini kapatan koyu bir kutu içinde çizer.
+     * Yazı kutuya sığana kadar küçülür; çok uzunsa kutu aşağı doğru uzar.
+     */
+    private fun bloklariGoster(id: String, bloklar: org.json.JSONArray, stil: JSONObject?) {
+        if (!katmaniKur()) return
+        val k = kok ?: return
+        val katman = alanKatmanlari.getOrPut(id) {
+            FrameLayout(this).also { k.addView(it, FrameLayout.LayoutParams(-1, -1)) }
+        }
+        katman.removeAllViews()
+        alanGizleyiciler[id]?.let { ana.removeCallbacks(it) }
+        if (bloklar.length() == 0) return
+
+        val m = resources.displayMetrics
+        val w = m.widthPixels; val h = m.heightPixels
+        val yaziRengi = stil?.optInt("yaziRengi", Color.WHITE) ?: Color.WHITE
+        val arkaRengi = stil?.optInt("arkaRengi", Color.BLACK) ?: Color.BLACK
+        // Orijinal yazı görünmesin diye arka plan en az %88 dolu
+        val opak = ((stil?.optInt("arkaOpaklik", 60) ?: 60).coerceAtLeast(88)) * 255 / 100
+        val tip = yaziTipi(stil?.optString("tip", "varsayilan") ?: "varsayilan")
+        val enAz = h * 0.016f
+
+        for (i in 0 until bloklar.length()) {
+            val b = bloklar.optJSONObject(i) ?: continue
+            val metin = b.optString("text", "")
+            if (metin.isBlank()) continue
+            val kt = b.optJSONArray("kutu") ?: continue
+            val l = (kt.optDouble(0) * w).toInt(); val u = (kt.optDouble(1) * h).toInt()
+            val kw = ((kt.optDouble(2) - kt.optDouble(0)) * w).toInt().coerceAtLeast(40)
+            val kh = ((kt.optDouble(3) - kt.optDouble(1)) * h).toInt().coerceAtLeast(16)
+            val dolgu = (h * 0.004f).toInt()
+            val t = TextView(this).apply {
+                typeface = tip
+                setTextColor(yaziRengi)
+                gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                setPadding(dolgu * 2, dolgu, dolgu * 2, dolgu)
+                background = GradientDrawable().apply {
+                    cornerRadius = h * 0.008f
+                    setColor(Color.argb(opak, Color.red(arkaRengi), Color.green(arkaRengi), Color.blue(arkaRengi)))
+                }
+                minHeight = kh
+            }
+            // Kutuya sığan en büyük boyut (orijinal satır yüksekliğinden başla)
+            val ic = kw - dolgu * 4
+            var boyut = (kh * 0.75f).coerceAtMost(h * 0.05f).coerceAtLeast(enAz)
+            val boya = TextPaint(t.paint).apply { typeface = tip }
+            while (boyut > enAz && ic > 0) {
+                boya.textSize = boyut
+                if (StaticLayout.Builder.obtain(metin, 0, metin.length, boya, ic).build().height <= kh - dolgu * 2) break
+                boyut -= 1f
+            }
+            t.setTextSize(TypedValue.COMPLEX_UNIT_PX, boyut)
+            t.text = metin
+            katman.addView(t, FrameLayout.LayoutParams(kw, -2).apply { leftMargin = l; topMargin = u })
+        }
+        val gizleyici = Runnable { katman.removeAllViews() }
+        alanGizleyiciler[id] = gizleyici
+        ana.postDelayed(gizleyici, GUVENLIK_GIZLE_MS)
+    }
 
     private fun goster(metin: String, stil: JSONObject?, sure: Long) {
         ana.removeCallbacks(gizle)
@@ -350,6 +423,7 @@ class AltyaziServisi : Service() {
         ana.removeCallbacksAndMessages(null)
         kok?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         kok = null; kap = null; yazi = null
+        alanKatmanlari.clear(); alanGizleyiciler.clear()
         super.onDestroy()
     }
 }

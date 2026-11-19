@@ -11,8 +11,8 @@ android {
         applicationId = "com.karadeniz.altyazi.tv"
         minSdk = 26
         targetSdk = 33
-        versionCode = 3
-        versionName = "0.8.0"
+        versionCode = 4
+        versionName = "0.9.0"
     }
 
     signingConfigs {

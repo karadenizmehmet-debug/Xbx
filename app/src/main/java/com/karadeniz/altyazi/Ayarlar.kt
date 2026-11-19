@@ -130,6 +130,32 @@ class Ayarlar(private val context: Context) {
             .putFloat("wr", r.sag).putFloat("wb", r.alt)
             .apply()
 
+    /** Alanın okuma bölgesi (video oranı). Altyazı eski "webBolge" anahtarlarını kullanır. */
+    fun alanBolge(a: Alan): Oran = when (a) {
+        Alan.ALTYAZI -> webBolge
+        Alan.TELEFON -> oranOku("tel", Oran(0.62f, 0.20f, 0.98f, 0.98f))
+        Alan.BILDIRIM -> oranOku("bil", Oran(0.66f, 0.70f, 0.99f, 0.97f))
+    }
+
+    fun alanBolgeYaz(a: Alan, o: Oran) = when (a) {
+        Alan.ALTYAZI -> webBolge = o
+        Alan.TELEFON -> oranYaz("tel", o)
+        Alan.BILDIRIM -> oranYaz("bil", o)
+    }
+
+    fun alanAktif(a: Alan): Boolean = p.getBoolean("aktif_${a.id}", a == Alan.ALTYAZI)
+    fun alanAktifYaz(a: Alan, v: Boolean) = p.edit().putBoolean("aktif_${a.id}", v).apply()
+
+    fun minKelime(a: Alan): Int = p.getInt("minKelime_${a.id}", a.minKelimeVarsayilan)
+    fun minKelimeYaz(a: Alan, v: Int) = p.edit().putInt("minKelime_${a.id}", v).apply()
+
+    private fun oranOku(on: String, v: Oran) = Oran(
+        p.getFloat("${on}l", v.sol), p.getFloat("${on}t", v.ust), p.getFloat("${on}r", v.sag), p.getFloat("${on}b", v.alt)
+    )
+
+    private fun oranYaz(on: String, o: Oran) = p.edit()
+        .putFloat("${on}l", o.sol).putFloat("${on}t", o.ust).putFloat("${on}r", o.sag).putFloat("${on}b", o.alt).apply()
+
     /** Uygulama içi modda oyun sesi telefondan gelsin mi? */
     var webSes: Boolean
         get() = p.getBoolean("webSes", true)

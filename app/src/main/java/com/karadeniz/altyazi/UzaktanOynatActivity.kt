@@ -83,6 +83,11 @@ class UzaktanOynatActivity : AppCompatActivity() {
     private lateinit var sesKapali: TextView
     private val ana = Handler(Looper.getMainLooper())
     private var hat: AltyaziHatti? = null
+    /** Yerinde çeviri hatları (Telefon, Bildirim). */
+    private val yerinde = mutableMapOf<Alan, YerindeHatti>()
+    private val alanDugmeleri = mutableMapOf<Alan, TextView>()
+    private lateinit var digerAlanlar: TextView
+    private val alanCevirileri = linkedMapOf<Alan, List<String>>()
     private var webKapandi = false
     private var karartma: View? = null
 
@@ -97,7 +102,7 @@ class UzaktanOynatActivity : AppCompatActivity() {
     private var kareSayisi = 0
     private var islenenKare = 0
     private var sonKareZamani = 0L
-    private var sonKareB64 = ""
+    private val sonKareB64 = mutableMapOf<Alan, String>()
     private var sonHata = ""
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -118,6 +123,9 @@ class UzaktanOynatActivity : AppCompatActivity() {
         }
         webAyarla()
         hat = AltyaziHatti(this, ayar, ::ceviriGeldi, ::durum).also { it.baslat() }
+        listOf(Alan.TELEFON, Alan.BILDIRIM).forEach { a ->
+            yerinde[a] = YerindeHatti(this, ayar, a, ::yerindeGeldi).also { it.baslat() }
+        }
         durum("Microsoft'un sayfası açılıyor…")
         web.loadUrl(ADRES)
 
@@ -184,6 +192,8 @@ class UzaktanOynatActivity : AppCompatActivity() {
         kart.addView(ceviri)
         orijinal = yazi("", 12f, SOLUK).apply { maxLines = 2; visibility = View.GONE; setPadding(0, dp(4), 0, 0) }
         kart.addView(orijinal)
+        digerAlanlar = yazi("", 14f, YAZI).apply { maxLines = 6; visibility = View.GONE; setPadding(0, dp(8), 0, 0) }
+        kart.addView(digerAlanlar)
         kok.addView(kart, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
 
         // Durum satırı
@@ -208,12 +218,22 @@ class UzaktanOynatActivity : AppCompatActivity() {
         kok.addView(ses)
         sesBoya()
 
+        // Alanlar: dokununca aç/kapat
+        val alanlar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        Alan.entries.forEachIndexed { i, a ->
+            val d = hap("") { alanDegistir(a) }
+            alanDugmeleri[a] = d
+            alanlar.addView(d, LinearLayout.LayoutParams(0, dp(40), 1f).apply { if (i < 2) marginEnd = dp(8) })
+        }
+        kok.addView(alanlar, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        alanlariBoya()
+
         // Düğmeler
         val dugmeler = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         fun ekle(v: View, son: Boolean = false) = dugmeler.addView(
             v, LinearLayout.LayoutParams(0, dp(52), 1f).apply { if (!son) marginEnd = dp(8) }
         )
-        ekle(dugme("Bölge", YAZI) { bolgeSec() })
+        ekle(dugme("Bölge", YAZI) { alanSecVeBolge() })
         ekle(dugme("Görünüm", YAZI) { gorunumPaneli() })
         ekle(dugme("Kontrol et", YAZI) { kontrolEt() })
         ekle(dugme("■ Durdur", KIRMIZI) { finish() }, son = true)
@@ -283,6 +303,7 @@ class UzaktanOynatActivity : AppCompatActivity() {
             // Görüntü işlemi çökerse uygulamayı da çökertme
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
                 hat?.kapat(); hat = null
+                yerinde.values.forEach { it.kapat() }; yerinde.clear()
                 webKapandi = true
                 webKap.removeView(view)
                 view.destroy()
@@ -326,7 +347,7 @@ class UzaktanOynatActivity : AppCompatActivity() {
     private fun mesajGeldi(veri: String) {
         val m = try { JSONObject(veri) } catch (_: Exception) { return }
         when (m.optString("t")) {
-            "kare" -> kareGeldi(m.optString("d"))
+            "kare" -> kareGeldi(Alan.bul(m.optString("a", "altyazi")) ?: Alan.ALTYAZI, m.optString("d"))
             "video" -> {
                 val a = m.optJSONArray("a") ?: return
                 if (a.length() == 4) videoAlani = Oran(
@@ -338,7 +359,7 @@ class UzaktanOynatActivity : AppCompatActivity() {
                 jsDurum = m; jsDurumZamani = SystemClock.elapsedRealtime()
                 pencereyiAyarla(m.optInt("w", 0) > 0 && m.optInt("h", 0) > 0)
             }
-            "temizle" -> hat?.temizle()
+            "temizle" -> { hat?.temizle(); yerinde.values.forEach { it.temizle() } }
             "hata" -> { sonHata = m.optString("m"); durum("Görüntü okunamıyor: $sonHata", hata = true) }
             "yuklendi" -> {
                 kopruVar = true
@@ -368,31 +389,34 @@ class UzaktanOynatActivity : AppCompatActivity() {
         kart.layoutParams = klp
     }
 
-    private fun kareGeldi(base64Jpeg: String) {
+    private fun kareGeldi(alan: Alan, base64Jpeg: String) {
         kareSayisi++
         sonKareZamani = SystemClock.elapsedRealtime()
         if (base64Jpeg.isEmpty() || base64Jpeg.length > EN_COK_BASE64) return
-        sonKareB64 = base64Jpeg
+        sonKareB64[alan] = base64Jpeg
         sonHata = ""   // kare geliyorsa önceki geçici hata artık geçerli değil
-        val h = hat ?: return
-        if (!h.hazir) return
+        val hazir = if (alan == Alan.ALTYAZI) hat?.hazir == true else yerinde[alan]?.hazir == true
+        if (!hazir) return
         val bayt = try { Base64.decode(base64Jpeg, Base64.DEFAULT) } catch (_: Exception) { return }
         val sinir = Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bayt, 0, bayt.size, sinir)
         if (sinir.outWidth !in 1..EN_COK_KENAR || sinir.outHeight !in 1..EN_COK_KENAR) return
         val bmp = BitmapFactory.decodeByteArray(bayt, 0, bayt.size) ?: return
         islenenKare++
-        h.isle(bmp)
+        if (alan == Alan.ALTYAZI) hat?.isle(bmp) ?: bmp.recycle()
+        else yerinde[alan]?.isle(bmp, ayar.alanBolge(alan)) ?: bmp.recycle()
     }
 
     private fun jsAyarGonder() {
         if (webKapandi) return
-        val b = ayar.webBolge
-        web.evaluateJavascript(
-            "window.__altyazi && (__altyazi.bolge(${b.sol},${b.ust},${b.sag},${b.alt}), " +
-                "__altyazi.ses(${ayar.webSes}), __altyazi.aralik(${ayar.aralikMs}))",
-            null
-        )
+        val js = StringBuilder("window.__altyazi && (")
+        Alan.entries.forEach { a ->
+            val b = ayar.alanBolge(a)
+            js.append("__altyazi.bolge('${a.id}',${b.sol},${b.ust},${b.sag},${b.alt}), ")
+            js.append("__altyazi.aktif('${a.id}',${ayar.alanAktif(a)}), ")
+        }
+        js.append("__altyazi.ses(${ayar.webSes}), __altyazi.aralik(${ayar.aralikMs}))")
+        web.evaluateJavascript(js.toString(), null)
     }
 
     // ---------- Bölge ----------
@@ -401,7 +425,16 @@ class UzaktanOynatActivity : AppCompatActivity() {
      * Bölge seçici tüm ekranı kaplar (oranlar ekranın tamamına göre).
      * Videonun WebView içindeki alanını ekran koordinatına çevirip oradan dönüştürüyoruz.
      */
-    private fun bolgeSec() {
+    /** Hangi alanın bölgesi? Sonra o alan için kutu çizme ekranı. */
+    private fun alanSecVeBolge() {
+        val adlar = Alan.entries.map { it.ad + if (ayar.alanAktif(it)) "" else " (kapalı)" }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Hangi alanın yerini seçeceksin?")
+            .setItems(adlar) { _, i -> bolgeSec(Alan.entries[i]) }
+            .show()
+    }
+
+    private fun bolgeSec(alan: Alan = Alan.ALTYAZI) {
         val ekran = windowManager.maximumWindowMetrics.bounds
         val ew = ekran.width().toFloat(); val eh = ekran.height().toFloat()
         val konum = IntArray(2).also { web.getLocationOnScreen(it) }
@@ -409,20 +442,56 @@ class UzaktanOynatActivity : AppCompatActivity() {
         val v = videoAlani.takeIf { it.sag > it.sol }
             ?: Oran(0f, 0f, web.width.toFloat(), web.height.toFloat())
         val videoEkranda = Oran(v.sol + wx, v.ust + wy, v.sag + wx, v.alt + wy)
-        val baslangicPx = MetinIsleme.videodanEkrana(ayar.webBolge, videoEkranda)
+        val baslangicPx = MetinIsleme.videodanEkrana(ayar.alanBolge(alan), videoEkranda)
         val baslangic = RectF(baslangicPx.sol / ew, baslangicPx.ust / eh, baslangicPx.sag / ew, baslangicPx.alt / eh)
         BolgeSecici(
-            this, windowManager, baslangic, "İngilizce altyazının çıktığı alanı çiz",
+            this, windowManager, baslangic, when (alan) {
+                Alan.ALTYAZI -> "İngilizce altyazının çıktığı alanı çiz"
+                Alan.TELEFON -> "Oyundaki telefonun ekranını çiz"
+                Alan.BILDIRIM -> "Bildirimlerin çıktığı köşeyi çiz"
+            },
             WindowManager.LayoutParams.TYPE_APPLICATION
         ) { yeni ->
             if (yeni != null) {
                 val secim = Oran(yeni.left * ew, yeni.top * eh, yeni.right * ew, yeni.bottom * eh)
-                ayar.webBolge = MetinIsleme.ekrandanVideoya(secim, videoEkranda)
-                hat?.sifirla()
+                ayar.alanBolgeYaz(alan, MetinIsleme.ekrandanVideoya(secim, videoEkranda))
+                if (alan == Alan.ALTYAZI) hat?.sifirla() else yerinde[alan]?.sifirla()
+                if (!ayar.alanAktif(alan)) { ayar.alanAktifYaz(alan, true); alanlariBoya() }
                 jsAyarGonder()
-                durum("Bölge kaydedildi.")
+                durum("Bölge kaydedildi: ${alan.ad}.")
             }
         }.goster()
+    }
+
+    // ---------- Alanlar ----------
+
+    private fun alanDegistir(a: Alan) {
+        val acik = !ayar.alanAktif(a)
+        ayar.alanAktifYaz(a, acik)
+        alanlariBoya()
+        jsAyarGonder()
+        if (!acik) {
+            if (a == Alan.ALTYAZI) hat?.temizle() else yerinde[a]?.temizle()
+            yerindeGeldi(a, emptyList())
+        }
+        durum("${a.ad} " + if (acik) "açık." else "kapalı.")
+    }
+
+    private fun alanlariBoya() {
+        alanDugmeleri.forEach { (a, d) ->
+            val acik = ayar.alanAktif(a)
+            d.text = (if (acik) "✓ " else "") + a.ad
+            d.background = yuvarlak(if (acik) VURGU else KART, 20, if (acik) null else CERCEVE)
+            d.setTextColor(if (acik) ARKA else SOLUK)
+        }
+    }
+
+    /** Telefon/Bildirim çevirileri kartta etiketli satırlar olarak. */
+    private fun yerindeGeldi(a: Alan, ceviriler: List<String>) {
+        if (ceviriler.isEmpty()) alanCevirileri.remove(a) else alanCevirileri[a] = ceviriler
+        val metin = alanCevirileri.entries.joinToString("\n") { (k, v) -> "${k.ad}: " + v.joinToString(" · ") }
+        digerAlanlar.text = metin
+        digerAlanlar.visibility = if (metin.isBlank()) View.GONE else View.VISIBLE
     }
 
     // ---------- Görünüm (çeviri sürerken, TV'de canlı) ----------
@@ -493,6 +562,14 @@ class UzaktanOynatActivity : AppCompatActivity() {
         }
         renkleriCiz()
         panel.addView(renkSatiri)
+
+        listOf(Alan.TELEFON, Alan.BILDIRIM).forEach { a ->
+            val baslik = etiket("")
+            fun yaz(n: Int) { baslik.text = "${a.ad}: en az $n kelimelik yazılar çevrilir" }
+            yaz(ayar.minKelime(a))
+            panel.addView(baslik)
+            panel.addView(kaydirici(1, 6, ayar.minKelime(a)) { n -> ayar.minKelimeYaz(a, n); yaz(n) })
+        }
 
         panel.addView(etiket("Küfür sansürü"))
         val sansurDugme = hap("") {}
@@ -585,6 +662,10 @@ class UzaktanOynatActivity : AppCompatActivity() {
             satir(h?.modelHazirMi == true, "Çeviri modeli: " + if (h?.modelHazirMi == true) "hazır" else "hazırlanıyor/yok"),
             satir(null, "Son okunan İngilizce: " + (h?.sonOkunan?.ifBlank { "(boş)" } ?: "-")),
             satir(null, "Son çeviri: " + (h?.sonTr?.ifBlank { "(yok)" } ?: "-")),
+            *yerinde.map { (a, y) ->
+                satir(null, "${a.ad} (" + (if (ayar.alanAktif(a)) "açık" else "kapalı") + "): " +
+                    y.sonOkunan.ifBlank { "(yazı yok)" }.take(120))
+            }.toTypedArray(),
         )
         if (sonHata.isNotBlank()) satirlar.add(satir(false, "Hata: $sonHata"))
         val tvSatiri = satir(null, "TV: " + ayar.tvAdresi.ifBlank { "adres girilmemiş" } + if (ayar.tvAdresi.isBlank()) "" else " (deneniyor…)")
@@ -596,21 +677,24 @@ class UzaktanOynatActivity : AppCompatActivity() {
             setPadding(dp(20), dp(8), dp(20), dp(8))
         }
         icerik.addView(metin)
-        val kare = kareResmi()
-        icerik.addView(yazi(if (kare != null) "Uygulamanın okuduğu bölge:" else "Henüz kare yok (bölge boş olabilir).", 13f, SOLUK).apply {
-            setPadding(0, dp(12), 0, dp(6))
-        })
-        if (kare != null) icerik.addView(ImageView(this).apply {
-            setImageBitmap(kare)
-            adjustViewBounds = true
-            background = yuvarlak(Color.BLACK, 8)
-        }, LinearLayout.LayoutParams(-1, -2))
+        Alan.entries.filter { ayar.alanAktif(it) }.forEach { a ->
+            val kare = kareResmi(a)
+            icerik.addView(yazi(if (kare != null) "${a.ad}: uygulamanın okuduğu bölge" else "${a.ad}: henüz kare yok", 13f, SOLUK).apply {
+                setPadding(0, dp(12), 0, dp(6))
+            })
+            if (kare != null) icerik.addView(ImageView(this).apply {
+                setImageBitmap(kare)
+                adjustViewBounds = true
+                maxHeight = dp(260)
+                background = yuvarlak(Color.BLACK, 8)
+            }, LinearLayout.LayoutParams(-1, -2))
+        }
 
         AlertDialog.Builder(this)
             .setTitle("Kontrol")
             .setView(ScrollView(this).apply { addView(icerik) })
             .setPositiveButton("Tamam", null)
-            .setNeutralButton("Bölge") { _, _ -> bolgeSec() }
+            .setNeutralButton("Bölge") { _, _ -> alanSecVeBolge() }
             .show()
 
         // TV bağlantısını gerçekten dene
@@ -627,10 +711,10 @@ class UzaktanOynatActivity : AppCompatActivity() {
         }
     }
 
-    private fun kareResmi(): Bitmap? {
-        if (sonKareB64.isEmpty()) return null
+    private fun kareResmi(a: Alan): Bitmap? {
+        val b64 = sonKareB64[a] ?: return null
         return try {
-            val b = Base64.decode(sonKareB64, Base64.DEFAULT)
+            val b = Base64.decode(b64, Base64.DEFAULT)
             BitmapFactory.decodeByteArray(b, 0, b.size)
         } catch (_: Exception) { null }
     }
@@ -676,6 +760,7 @@ class UzaktanOynatActivity : AppCompatActivity() {
     override fun onPause() {
         if (!webKapandi) web.evaluateJavascript("window.__altyazi && __altyazi.dur()", null)
         hat?.temizle()
+        yerinde.values.forEach { it.temizle() }
         CookieManager.getInstance().flush()
         super.onPause()
     }
@@ -683,6 +768,7 @@ class UzaktanOynatActivity : AppCompatActivity() {
     override fun onDestroy() {
         ana.removeCallbacksAndMessages(null)
         hat?.kapat(); hat = null
+        yerinde.values.forEach { it.kapat() }; yerinde.clear()
         if (!webKapandi) web.destroy()
         super.onDestroy()
     }

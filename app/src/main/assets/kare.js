@@ -8,7 +8,9 @@
 
   function gonder(m) { try { K.postMessage(JSON.stringify(m)); } catch (e) { } }
 
-  var bolge = [0.10, 0.72, 0.90, 0.95];
+  // Okunacak alanlar: id → [sol, üst, sağ, alt] (video oranı) ve açık/kapalı
+  var bolgeler = { altyazi: [0.10, 0.72, 0.90, 0.95] };
+  var aktif = { altyazi: true };
   var aralikMs = 450;
   var sesAcik = true;
   var calisiyor = true;
@@ -107,14 +109,22 @@
     var anahtar = alan.map(Math.round).join(',');
     if (anahtar !== sonAlan) { sonAlan = anahtar; gonder({ t: 'video', a: alan }); }
 
-    var sx = Math.round(bolge[0] * v.videoWidth), sy = Math.round(bolge[1] * v.videoHeight);
-    var sw = Math.round((bolge[2] - bolge[0]) * v.videoWidth), sh = Math.round((bolge[3] - bolge[1]) * v.videoHeight);
+    for (var id in bolgeler) {
+      if (aktif[id]) kirpVeGonder(v, id, bolgeler[id]);
+    }
+  }
+
+  // Bölgeyi kırp; küçük bölgeleri 2 katına büyüt (telefon yazıları küçük, OCR daha iyi okur)
+  function kirpVeGonder(v, id, b) {
+    var sx = Math.round(b[0] * v.videoWidth), sy = Math.round(b[1] * v.videoHeight);
+    var sw = Math.round((b[2] - b[0]) * v.videoWidth), sh = Math.round((b[3] - b[1]) * v.videoHeight);
     if (sw < 8 || sh < 8) return;
-    tuval.width = sw; tuval.height = sh;
+    var olcek = id === 'altyazi' ? 1 : Math.max(1, Math.min(2, 1280 / sw));
+    tuval.width = Math.round(sw * olcek); tuval.height = Math.round(sh * olcek);
     try {
-      ctx.drawImage(v, sx, sy, sw, sh, 0, 0, sw, sh);
+      ctx.drawImage(v, sx, sy, sw, sh, 0, 0, tuval.width, tuval.height);
       var veri = tuval.toDataURL('image/jpeg', 0.85);
-      gonder({ t: 'kare', d: veri.substring(veri.indexOf(',') + 1) });
+      gonder({ t: 'kare', a: id, d: veri.substring(veri.indexOf(',') + 1) });
     } catch (e) {
       // Kare henüz hazır değilse sessiz geç; güvenlik engeli (SecurityError) bir kez bildirilir
       if (e && e.name === 'SecurityError' && !hataBildirildi) {
@@ -125,7 +135,8 @@
   }
 
   window.__altyazi = {
-    bolge: function (l, t, r, b) { bolge = [l, t, r, b]; },
+    bolge: function (id, l, t, r, b) { bolgeler[id] = [l, t, r, b]; },
+    aktif: function (id, acik) { aktif[id] = !!acik; },
     ses: function (acik) { sesAcik = !!acik; sesUygula(); },
     aralik: function (ms) { aralikMs = ms; },
     dur: function () { calisiyor = false; },
