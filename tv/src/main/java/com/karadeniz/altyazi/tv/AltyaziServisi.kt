@@ -341,9 +341,15 @@ class AltyaziServisi : Service() {
             // Orijinal yazının kenarları da örtülsün diye kutu her yönden biraz (yüksekliğin %12'si) büyür
             val ham = arrayOf(x(kt.optDouble(0)), y(kt.optDouble(1)), x(kt.optDouble(2)), y(kt.optDouble(3)))
             val pay = (ham[3] - ham[1]) * 0.12
-            val l = (ham[0] - pay).toInt(); val u = (ham[1] - pay).toInt()
-            val kw = (ham[2] - ham[0] + pay * 2).toInt().coerceAtLeast(30)
-            val kh = (ham[3] - ham[1] + pay * 2).toInt().coerceAtLeast(14)
+            val l0 = (ham[0] - pay).toInt(); val u0 = (ham[1] - pay).toInt()
+            val kw0 = (ham[2] - ham[0] + pay * 2).toInt().coerceAtLeast(30)
+            val kh0 = (ham[3] - ham[1] + pay * 2).toInt().coerceAtLeast(14)
+            // Alan boyut ayarı (uzaktan okunsun diye büyütme): kutu ve yazı birlikte büyür, ekran kenarına yakın taraf sabit kalır
+            val olcek = b.optDouble("olcek", 1.0).coerceIn(0.8, 2.5)
+            val kw = (kw0 * olcek).toInt(); val kh = (kh0 * olcek).toInt()
+            val sagdan = l0 + kw0 / 2 > w / 2
+            val l = (if (sagdan) l0 + kw0 - kw else l0).coerceIn(0, (w - kw).coerceAtLeast(0))
+            val u = (u0 + (kh0 - kh) / 2).coerceIn(0, (h - kh).coerceAtLeast(0))
             val dolgu = (kh * 0.08f).toInt().coerceAtLeast(1)
             val sy = b.optDouble("sy", 0.0)
             val t = TextView(this).apply {
@@ -378,8 +384,8 @@ class AltyaziServisi : Service() {
                 // küçül (%72'ye kadar), yine sığmazsa kutu en fazla 1,6 kat aşağı uzar, o da yetmezse küçülmeye devam.
                 boya.textSize = 100f
                 val satirOrani = (boya.fontMetrics.descent - boya.fontMetrics.ascent) / 100f
-                val hedef = if (sy > 0) (sy * ho * h / satirOrani).toFloat() else kh * 0.6f
-                boyut = hedef.coerceAtMost(h * 0.06f).coerceAtLeast(enAz)
+                val hedef = if (sy > 0) (sy * ho * h * olcek / satirOrani).toFloat() else kh * 0.6f
+                boyut = hedef.coerceAtMost(h * 0.09f).coerceAtLeast(enAz)
                 val taban = (boyut * 0.72f).coerceAtLeast(enAz)
                 val sinir = (kh * 1.6f).toInt()
                 while (boyut > taban && yukseklik(boyut) > kh - 2) boyut -= 0.5f

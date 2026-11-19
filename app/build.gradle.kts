@@ -11,8 +11,8 @@ android {
         applicationId = "com.karadeniz.altyazi"
         minSdk = 30
         targetSdk = 35
-        versionCode = 30
-        versionName = "0.19.0"
+        versionCode = 31
+        versionName = "0.19.1"
         ndk { abiFilters += "arm64-v8a" }
     }
 

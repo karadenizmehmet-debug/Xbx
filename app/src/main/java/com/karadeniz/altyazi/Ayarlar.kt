@@ -155,6 +155,10 @@ class Ayarlar(private val context: Context) {
     fun minKelime(a: Alan): Int = p.getInt("minKelime_${a.id}", a.minKelimeVarsayilan)
     fun minKelimeYaz(a: Alan, v: Int) = p.edit().putInt("minKelime_${a.id}", v).apply()
 
+    /** Yerinde çevirinin boyutu, orijinale göre yüzde (100 = orijinal boyu). Bildirim varsayılanı uzaktan okunsun diye büyük. */
+    fun alanBoyut(a: Alan): Int = p.getInt("boyut_${a.id}", if (a == Alan.BILDIRIM) 140 else 100)
+    fun alanBoyutYaz(a: Alan, v: Int) = p.edit().putInt("boyut_${a.id}", v).apply()
+
     private fun oranOku(on: String, v: Oran) = Oran(
         p.getFloat("${on}l", v.sol), p.getFloat("${on}t", v.ust), p.getFloat("${on}r", v.sag), p.getFloat("${on}b", v.alt)
     )

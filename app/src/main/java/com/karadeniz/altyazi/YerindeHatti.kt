@@ -275,6 +275,7 @@ class YerindeHatti(
         val dizi = JSONArray()
         bloklar.forEachIndexed { i, b ->
             val o = JSONObject().put("text", ceviriler[i]).put("tek", b.tekSatir).put("aci", b.aci.toDouble())
+            o.put("olcek", ayar.alanBoyut(alan) / 100.0)
             if (b.satirYuk > 0f) o.put("sy", b.satirYuk.toDouble())
             if (b.arka != null) o.put("arka", b.arka)
             if (b.yazi != null) o.put("yazi", b.yazi)

@@ -654,6 +654,11 @@ class UzaktanOynatActivity : AppCompatActivity() {
             yaz(ayar.minKelime(a))
             panel.addView(baslik)
             panel.addView(kaydirici(1, 6, ayar.minKelime(a)) { n -> ayar.minKelimeYaz(a, n); yaz(n) })
+            val boyutBaslik = yazi("", 12f, SOLUK)
+            fun boyutYaz(n: Int) { boyutBaslik.text = "${a.ad} çeviri boyutu: %$n (orijinale göre)" }
+            boyutYaz(ayar.alanBoyut(a))
+            panel.addView(boyutBaslik)
+            panel.addView(kaydirici(80, 250, ayar.alanBoyut(a)) { n -> ayar.alanBoyutYaz(a, n); boyutYaz(n); stiliGonder() })
         }
 
         panel.addView(etiket("Telefon alanı"))
