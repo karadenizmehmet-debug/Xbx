@@ -656,6 +656,17 @@ class UzaktanOynatActivity : AppCompatActivity() {
             panel.addView(kaydirici(1, 6, ayar.minKelime(a)) { n -> ayar.minKelimeYaz(a, n); yaz(n) })
         }
 
+        panel.addView(etiket("Telefon alanı"))
+        val algilaDugme = hap("") {}
+        fun algilaCiz() {
+            algilaDugme.text = if (ayar.telefonAlgila) "Yalnızca oyundaki telefon açıkken çevir" else "Bölgedeki her yazıyı çevir"
+            algilaDugme.background = yuvarlak(if (ayar.telefonAlgila) VURGU else ARKA, 18, if (ayar.telefonAlgila) null else CERCEVE)
+            algilaDugme.setTextColor(if (ayar.telefonAlgila) ARKA else YAZI)
+        }
+        algilaDugme.setOnClickListener { ayar.telefonAlgila = !ayar.telefonAlgila; algilaCiz() }
+        algilaCiz()
+        panel.addView(algilaDugme, LinearLayout.LayoutParams(-1, dp(44)))
+
         panel.addView(etiket("Küfür sansürü"))
         val sansurDugme = hap("") {}
         fun sansurCiz() {

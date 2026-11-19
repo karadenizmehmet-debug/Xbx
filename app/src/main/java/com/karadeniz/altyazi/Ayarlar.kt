@@ -168,6 +168,11 @@ class Ayarlar(private val context: Context) {
         get() = p.getFloat("hizaOlcek", 1f)
         set(v) = p.edit().putFloat("hizaOlcek", v).apply()
 
+    /** Telefon alanı yalnızca oyundaki telefon ekranı görünürken çevrilsin (harita vb. değil). */
+    var telefonAlgila: Boolean
+        get() = p.getBoolean("telefonAlgila", true)
+        set(v) = p.edit().putBoolean("telefonAlgila", v).apply()
+
     /** Uygulama içi modda oyun sesi telefondan gelsin mi? */
     var webSes: Boolean
         get() = p.getBoolean("webSes", true)

@@ -91,6 +91,15 @@ class YerindeHatti(
     /** Hat iş parçacığında: OCR → filtre → kararlılık → çeviri → yayın. Engelleyen çağrılar burada serbest. */
     private fun calis(kirpik: Bitmap, bolge: Oran) {
         val t = tanima ?: return
+        // Telefon alanı: oyundaki telefon ekranda değilse (harita, oyun) okuma; ekrandaki çeviriyi sil
+        if (alan == Alan.TELEFON && ayar.telefonAlgila && !telefonGorunuyor(kirpik)) {
+            sonOkunan = "(telefon ekranı görünmüyor)"
+            when (takip.gelen("", ayar.aralikMs)) {
+                Karar.Temizle -> yayinla(emptyList())
+                else -> {}
+            }
+            return
+        }
         val sonuc = Tasks.await(t.process(InputImage.fromBitmap(kirpik, 0)))
         val min = ayar.minKelime(alan)
         val bloklar = sonuc.textBlocks.flatMap { b ->
@@ -120,6 +129,17 @@ class YerindeHatti(
                 else if (yayinda.isNotEmpty() && SystemClock.elapsedRealtime() - sonGonderim > CANLI_TUT_MS) yayinla(yayinda)
             }
         }
+    }
+
+    /** Kırpıktan 48×48 ızgara örnekle, telefon ekranı mı bak. */
+    private fun telefonGorunuyor(bmp: Bitmap): Boolean {
+        val n = 48
+        val p = IntArray(n * n) { i ->
+            val x = (((i % n) + 0.5f) * bmp.width / n).toInt().coerceIn(0, bmp.width - 1)
+            val y = (((i / n) + 0.5f) * bmp.height / n).toInt().coerceIn(0, bmp.height - 1)
+            bmp.getPixel(x, y)
+        }
+        return YerindeIsleme.telefonEkraniMi(p)
     }
 
     /** Köşe noktaları (x[4], y[4]); yoksa düz kutudan. */
