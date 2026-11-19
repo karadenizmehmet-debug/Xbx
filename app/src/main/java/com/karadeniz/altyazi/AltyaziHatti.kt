@@ -20,7 +20,7 @@ import java.util.concurrent.Executors
 
 /**
  * Ortak altyazı hattı: kırpılmış kareden OCR → kararlılık → çeviri → TV + telefon.
- * Ekran kaydı modu (CaptureService) ve uygulama içi mod (UzaktanOynatActivity) aynı hattı kullanır.
+ * Uygulama içi Remote Play modu (UzaktanOynatActivity) kullanır.
  */
 class AltyaziHatti(
     private val context: Context,

@@ -95,16 +95,6 @@ class Ayarlar(private val context: Context) {
                 .put(k.right.toDouble()).put(k.bottom.toDouble()))
     }
 
-    /** Telefon ekranını karart, yalnızca büyük Türkçe altyazıyı göster (telefon TV'nin altında dururken). */
-    var sadeceAltyazi: Boolean
-        get() = p.getBoolean("sadece", false)
-        set(v) = p.edit().putBoolean("sadece", v).apply()
-
-    /** Tam ekran modunda çeviri TV'ye de gitsin mi? Kapalıysa yalnızca telefonda görünür. */
-    var sadeceTvGonder: Boolean
-        get() = p.getBoolean("sadeceTv", true)
-        set(v) = p.edit().putBoolean("sadeceTv", v).apply()
-
     var geceModu: Boolean
         get() = p.getBoolean("gece", true)
         set(v) = p.edit().putBoolean("gece", v).apply()
@@ -192,10 +182,6 @@ class Ayarlar(private val context: Context) {
         get() = p.getBoolean("webSes", true)
         set(v) = p.edit().putBoolean("webSes", v).apply()
 
-    /** Bağlantı modu: "web" = uygulama içinde, "ekran" = Xbox uygulaması + ekran kaydı. */
-    var mod: String
-        get() = p.getString("mod", "web") ?: "web"
-        set(v) = p.edit().putString("mod", v).apply()
 }
 
 /** Servis ile ekran arasında basit mesajlaşma (aynı süreç). */

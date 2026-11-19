@@ -8,7 +8,6 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
-import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -55,26 +54,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvBilgi: TextView
     private val bulunanTvler = linkedMapOf<String, TvBulucu.TvCihaz>()
     private var bulucu: TvBulucu? = null
-
-    private val ekranIzni = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { sonuc ->
-        val veri = sonuc.data
-        if (sonuc.resultCode == RESULT_OK && veri != null) {
-            val i = Intent(this, CaptureService::class.java)
-                .setAction(CaptureService.EYLEM_BASLAT)
-                .putExtra(CaptureService.EK_KOD, sonuc.resultCode)
-                .putExtra(CaptureService.EK_VERI, veri)
-            ContextCompat.startForegroundService(this, i)
-            durumYazi.text = "Başlatılıyor… Şimdi Xbox uygulamasında Remote Play'i aç."
-        } else {
-            durumYazi.text = "Ekran kaydı izni verilmedi."
-        }
-    }
-
-    private val bildirimIzni = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { ekranIzniIste() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         ayar = Ayarlar(this)
@@ -179,9 +158,9 @@ class MainActivity : AppCompatActivity() {
         )
         kok.addView(durumKarti())
         kok.addView(tvKarti())
+        kok.addView(denemeKarti())
         kok.addView(secenekKarti())
         kok.addView(sozlukKarti())
-        kok.addView(denemeKarti())
         kok.addView(gorunumKarti())
         kok.addView(aralikKarti())
         kok.addView(kullanimKarti())
@@ -276,17 +255,13 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { baslatDurdur() }
         }
         baslatDugme.layoutParams = LinearLayout.LayoutParams(-1, dp(56)).apply { topMargin = dp(14) }
-        val modSecimi = pillGrubu(
-            listOf("web" to "Uygulama içinde bağlan", "ekran" to "Xbox uygulamasıyla (ekran kaydı)"),
-            ayar.mod, esit = true, tipli = false
-        ) { ayar.mod = it }
         sonYazi = yazi("", 14f).apply {
             setTextColor(yaziRengi)
             visibility = View.GONE
             setPadding(dp(14), dp(12), dp(14), dp(12))
             background = yuvarlak(ColorUtils.setAlphaComponent(renk(MR.attr.colorSurface), 170), 14)
         }
-        return kart(renk(MR.attr.colorPrimaryContainer), durumSatiri, ust(modSecimi, 14), baslatDugme, ust(sonYazi, 12))
+        return kart(renk(MR.attr.colorPrimaryContainer), durumSatiri, baslatDugme, ust(sonYazi, 12))
     }
 
     private fun tvKarti(): View {
@@ -390,25 +365,13 @@ class MainActivity : AppCompatActivity() {
         val telefonda = anahtar("Telefonda da göster", "Çeviri telefon ekranında da görünür", ayar.telefondaGoster) {
             ayar.telefondaGoster = it
         }
-        val tvSecenek = anahtar(
-            "Tam ekranda TV'ye de gönder", "Tam ekran modundayken çeviriyi TV'ye de yollar",
-            ayar.sadeceTvGonder, ayar.sadeceAltyazi
-        ) { ayar.sadeceTvGonder = it }
-        val tamEkran = anahtar(
-            "Tam ekran altyazı modu", "Telefon kararır, büyük Türkçe yazı görünür", ayar.sadeceAltyazi
-        ) { b ->
-            ayar.sadeceAltyazi = b
-            tvSecenek.alpha = if (b) 1f else 0.45f
-            (tvSecenek.tag as MaterialSwitch).isEnabled = b
-            if (Durum.calisiyor) kisa("Durdurup yeniden başlatınca geçerli olur.")
-        }
         val cevrimici = anahtar(
             "Çevrimiçi çeviri", "Daha doğal çeviri; internet gerekir", ayar.cevrimici
         ) { ayar.cevrimici = it }
         val sansur = anahtar(
             "Küfür sansürü", "Küfürler yıldızlanır (s*****)", ayar.sansur
         ) { ayar.sansur = it }
-        return kart(yuzey(), baslik("Seçenekler"), telefonda, tamEkran, tvSecenek, cevrimici, sansur)
+        return kart(yuzey(), baslik("Seçenekler"), telefonda, cevrimici, sansur)
     }
 
     /** Sözlük: sabit çevirileri aç/kapat, düzenleme ekranına git. */
@@ -478,7 +441,7 @@ class MainActivity : AppCompatActivity() {
         }
         return kart(
             yuzey(),
-            baslik("Deneme", "Xbox bağlı olmadan TV'de nasıl göründüğüne bak (TV uygulaması açık olmalı)"),
+            baslik("Deneme (Xbox'sız önizleme)", "Xbox bağlı olmadan TV'de nasıl göründüğüne bak. TV uygulaması açık ve yukarıda seçili olmalı"),
             satir(dugme("Altyazı", true) { altyazi() }, dugme("Telefon", true) { telefon() }, dugme("Bildirim", true) { bildirim() }),
             ust(satir(dugme("Hepsini göster", false) { altyazi(); telefon(); bildirim() }, dugme("Temizle", false) { temizle() }), 8),
             boyutKaydirici(Alan.TELEFON),
@@ -591,9 +554,9 @@ class MainActivity : AppCompatActivity() {
     private fun kullanimKarti(): View {
         val adimlar = listOf(
             "TV adresini yaz (TV uygulaması açık olmalı).",
-            "Başlat'a bas ve ekran kaydı iznini ver.",
-            "Xbox uygulamasında Remote Play'i aç.",
-            "Sağ üstte \"Bölge\" ile İngilizce altyazı alanını, \"Kutu\" ile Türkçe altyazının yerini çiz."
+            "Başlat'a bas, Microsoft hesabınla giriş yap ve Xbox'ı seç (Remote Play).",
+            "Altında \"Bölge\" ile altyazı, telefon ve bildirim alanlarının okunacağı yeri çiz.",
+            "Xbox'sız denemek için aşağıdaki Deneme kartını kullan."
         )
         val liste = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         adimlar.forEachIndexed { i, s ->
@@ -733,33 +696,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun baslatDurdur() {
         ayar.tvAdresi = tvAlan.text.toString()
-        if (Durum.calisiyor) {
-            startService(Intent(this, CaptureService::class.java).setAction(CaptureService.EYLEM_DURDUR))
-            return
-        }
-        if (ayar.mod == "web") {
-            // Uygulama içi Remote Play: ekran kaydı ve üstte gösterme izni gerekmez
-            startActivity(Intent(this, UzaktanOynatActivity::class.java))
-            return
-        }
-        if (!Settings.canDrawOverlays(this)) {
-            kisa("\"Diğer uygulamaların üzerinde göster\" iznini aç, sonra geri dön.")
-            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
-            return
-        }
-        if (Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            bildirimIzni.launch(Manifest.permission.POST_NOTIFICATIONS)
-            return
-        }
-        ekranIzniIste()
-    }
-
-    private fun ekranIzniIste() {
-        val mpm = getSystemService(MediaProjectionManager::class.java)
-        // Yapılandırma yok: sistem "tek uygulama / tüm ekran" seçimini kullanıcıya bırakır
-        ekranIzni.launch(mpm.createScreenCaptureIntent())
+        // Uygulama içi Remote Play: ekran kaydı ve üstte gösterme izni gerekmez
+        startActivity(Intent(this, UzaktanOynatActivity::class.java))
     }
 
     private fun paylas() {
