@@ -48,7 +48,7 @@ import org.json.JSONObject
 class UzaktanOynatActivity : AppCompatActivity() {
 
     companion object {
-        private const val ADRES = "https://www.xbox.com/tr-TR/play"
+        private const val ADRES = "https://www.xbox.com/tr-TR/play/consoles"
         /** Köprüyü yalnızca Xbox kökenleri kullanabilir (Microsoft giriş sayfaları ve yabancı iframe'ler değil). */
         private val IZINLI_KOKEN = setOf("https://xbox.com", "https://*.xbox.com")
         /** Kırpık kare için üst sınırlar (bozuk/kötü niyetli veriyle bellek taşmasın). */
