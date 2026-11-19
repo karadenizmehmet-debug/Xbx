@@ -402,7 +402,10 @@ class MainActivity : AppCompatActivity() {
         val cevrimici = anahtar(
             "Çevrimiçi çeviri", "Daha doğal çeviri; internet gerekir", ayar.cevrimici
         ) { ayar.cevrimici = it }
-        return kart(yuzey(), baslik("Seçenekler"), telefonda, tamEkran, tvSecenek, cevrimici)
+        val sansur = anahtar(
+            "Küfür sansürü", "Küfürler yıldızlanır (s*****)", ayar.sansur
+        ) { ayar.sansur = it }
+        return kart(yuzey(), baslik("Seçenekler"), telefonda, tamEkran, tvSecenek, cevrimici, sansur)
     }
 
     /** Başlık + açıklama solda, anahtar sağda. Anahtar satırın `tag`'inde. */

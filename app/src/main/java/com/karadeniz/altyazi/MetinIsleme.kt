@@ -111,3 +111,37 @@ fun MetinIsleme.videodanEkrana(bolge: Oran, video: Oran): Oran {
     val w = video.sag - video.sol; val h = video.alt - video.ust
     return Oran(video.sol + bolge.sol * w, video.ust + bolge.ust * h, video.sol + bolge.sag * w, video.ust + bolge.alt * h)
 }
+
+/**
+ * Küfür sansürü: kelimenin ilk harfi kalır, gerisi yıldız olur ("siktir" → "s*****").
+ * Kalıplar tam kelimeye uyar; "götürmek", "sikke", "amaç" gibi masum kelimeler değişmez.
+ */
+object Sansur {
+    private val tr = java.util.Locale("tr")
+
+    private val kaliplar = listOf(
+        // Türkçe
+        "s[iı]k", "s[iı]kt[iı]r\\p{L}*", "s[iı]k[iı]ş\\p{L}*", "s[iı]keyim", "s[iı]ker[iı]m", "s[iı]kim\\p{L}*",
+        "s[iı]kt[iı]ğ\\p{L}*", "s[iı]ks[iı]n", "s[iı]kik\\p{L}*",
+        "am[iı]na", "am[iı]n[iı]", "amk", "aq", "amc[iı]k\\p{L}*",
+        "orospu\\p{L}*", "piç\\p{L}*", "yarra\\p{L}*", "yarak\\p{L}*", "dalyarak\\p{L}*",
+        "göt", "götü", "götün", "götüne", "götünü", "götler\\p{L}*", "götveren\\p{L}*", "götlek\\p{L}*",
+        "kahpe\\p{L}*", "pezevenk\\p{L}*", "gavat\\p{L}*", "ibne\\p{L}*", "puşt\\p{L}*", "kaltak\\p{L}*",
+        "sürtük\\p{L}*", "yavşak\\p{L}*", "şerefsiz\\p{L}*", "anan[iı]", "anan[iı]n", "bok", "boktan", "boku", "bokun",
+        // İngilizce (telefonda görünen orijinal satır için)
+        "fuck\\p{L}*", "motherfuck\\p{L}*", "shit\\p{L}*", "bullshit\\p{L}*", "bitch\\p{L}*", "asshole\\p{L}*",
+        "bastard\\p{L}*", "cunt\\p{L}*", "dick", "dickhead\\p{L}*", "cocksucker\\p{L}*", "whore\\p{L}*",
+        "slut\\p{L}*", "pussy", "wanker\\p{L}*"
+    ).map { Regex(it) }
+
+    private fun kufurMu(kelime: String): Boolean {
+        val k = kelime.lowercase(tr)
+        return kaliplar.any { it.matches(k) }
+    }
+
+    fun temizle(metin: String): String =
+        Regex("\\p{L}+").replace(metin) { m ->
+            val w = m.value
+            if (kufurMu(w)) w.first() + "*".repeat(w.length - 1) else w
+        }
+}

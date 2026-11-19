@@ -22,6 +22,11 @@ class Ayarlar(private val context: Context) {
         get() = p.getString("tvAdi", "") ?: ""
         set(v) = p.edit().putString("tvAdi", v).apply()
 
+    /** Çeviride küfürleri yıldızla (varsayılan açık). */
+    var sansur: Boolean
+        get() = p.getBoolean("sansur", true)
+        set(v) = p.edit().putBoolean("sansur", v).apply()
+
     var telefondaGoster: Boolean
         get() = p.getBoolean("telefonda", true)
         set(v) = p.edit().putBoolean("telefonda", v).apply()

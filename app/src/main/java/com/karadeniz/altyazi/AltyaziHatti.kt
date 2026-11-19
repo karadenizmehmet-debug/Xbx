@@ -145,7 +145,9 @@ class AltyaziHatti(
         mesgul = false
     }
 
-    private fun yayinla(tr: String, orijinal: String) {
+    private fun yayinla(trHam: String, orijinalHam: String) {
+        val tr = if (ayar.sansur) Sansur.temizle(trHam) else trHam
+        val orijinal = if (ayar.sansur) Sansur.temizle(orijinalHam) else orijinalHam
         ekrandaMetinVar = tr.isNotBlank()
         sonTr = tr
         val adres = tvAdresi()

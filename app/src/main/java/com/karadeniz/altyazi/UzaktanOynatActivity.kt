@@ -467,6 +467,17 @@ class UzaktanOynatActivity : AppCompatActivity() {
         renkleriCiz()
         panel.addView(renkSatiri)
 
+        panel.addView(etiket("Küfür sansürü"))
+        val sansurDugme = hap("") {}
+        fun sansurCiz() {
+            sansurDugme.text = if (ayar.sansur) "Açık: küfürler yıldızlanır (s*****)" else "Kapalı: çeviri olduğu gibi"
+            sansurDugme.background = yuvarlak(if (ayar.sansur) VURGU else ARKA, 18, if (ayar.sansur) null else CERCEVE)
+            sansurDugme.setTextColor(if (ayar.sansur) ARKA else YAZI)
+        }
+        sansurDugme.setOnClickListener { ayar.sansur = !ayar.sansur; sansurCiz() }
+        sansurCiz()
+        panel.addView(sansurDugme, LinearLayout.LayoutParams(-1, dp(44)))
+
         panel.addView(etiket("Yazı tipi"))
         val tipler = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         fun tipleriCiz() {
