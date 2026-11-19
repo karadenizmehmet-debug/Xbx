@@ -19,10 +19,32 @@
   var temizlendi = true;
   var hataBildirildi = false;
 
+  var sonDerinArama = 0;
+  // Gölge DOM (shadow root) içindeki videoları da bul
+  function tumVideolar() {
+    var liste = Array.prototype.slice.call(document.getElementsByTagName('video'));
+    if (liste.length) return liste;
+    if (Date.now() - sonDerinArama < 2000) return liste;   // pahalı; 2 sn'de bir
+    sonDerinArama = Date.now();
+    var yigin = [document];
+    while (yigin.length) {
+      var kok = yigin.pop();
+      var hepsi = kok.querySelectorAll('*');
+      for (var i = 0; i < hepsi.length; i++) {
+        var e = hepsi[i];
+        if (e.tagName === 'VIDEO') liste.push(e);
+        if (e.shadowRoot) yigin.push(e.shadowRoot);
+      }
+    }
+    return liste;
+  }
+
   // En büyük, oynayan video (Remote Play bağlantısı yenilenince yeni öğe gelir; her turda yeniden ara)
+  var sonListe = [];
   function videoBul() {
     var en = null, enAlan = 0;
-    var liste = document.getElementsByTagName('video');
+    var liste = tumVideolar();
+    sonListe = liste;
     for (var i = 0; i < liste.length; i++) {
       var v = liste[i];
       if (!v.videoWidth || !v.videoHeight) continue;
@@ -48,10 +70,19 @@
     if (!temizlendi && Date.now() - sonGoruntu > 1500) { temizlendi = true; gonder({ t: 'temizle' }); }
   }
 
+  // Kontrol et için 2 sn'de bir durum bildir
+  var sonDurum = 0;
+  function durumBildir(v) {
+    if (Date.now() - sonDurum < 2000) return;
+    sonDurum = Date.now();
+    gonder({ t: 'durum', n: sonListe.length, w: v ? v.videoWidth : 0, h: v ? v.videoHeight : 0, p: v ? v.paused : false });
+  }
+
   function tur() {
     setTimeout(tur, Math.max(200, aralikMs));
     if (!calisiyor) return;
     var v = videoBul();
+    durumBildir(v);
     if (!v) { goruntuYok(); return; }
     v.muted = !sesAcik;
     if (v.paused) { goruntuYok(); return; }

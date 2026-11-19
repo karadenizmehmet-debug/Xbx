@@ -5,7 +5,7 @@ Xbox oyunlarındaki İngilizce altyazıyı Türkçeye çeviren telefon uygulamas
 Çalışma şekli:
 
 1. Xbox, HDMI ile TV'de çalışır. Telefon aynı anda Remote Play ile görüntünün bir kopyasını alır. İki bağlantı modu var:
-   - **Uygulama içinde bağlan (varsayılan):** play.xbox.com uygulamanın içinde açılır. Microsoft hesabına bir kez, Microsoft'un kendi sayfasında giriş yapılır; uygulama şifreyi görmez, yalnızca oturum çerezleri saklanır. Altyazı bölgesi doğrudan video karesinden okunur.
+   - **Uygulama içinde bağlan (varsayılan):** play.xbox.com uygulamanın içinde küçük bir pencerede açılır; altında Türkçe çeviri, ses, Karart, Bölge, Kontrol et ve Durdur düğmeleri durur. Microsoft hesabına bir kez, Microsoft'un kendi sayfasında giriş yapılır; uygulama şifreyi görmez, yalnızca oturum çerezleri saklanır. Altyazı bölgesi doğrudan video karesinden okunur.
    - **Xbox uygulamasıyla (ekran kaydı):** Xbox uygulamasında Remote Play açılır, uygulama ekranı kaydedip okur (yedek yol).
 2. Uygulama, seçilen altyazı bölgesini okur (ML Kit OCR).
 3. Metni cihazda İngilizceden Türkçeye çevirir (ML Kit Translate, internetsiz).

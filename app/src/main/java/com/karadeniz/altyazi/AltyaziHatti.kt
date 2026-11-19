@@ -51,6 +51,12 @@ class AltyaziHatti(
     @Volatile var sonTr = ""
         private set
 
+    /** Son OCR sonucu (Kontrol et için). */
+    @Volatile var sonOkunan = ""
+        private set
+
+    val modelHazirMi: Boolean get() = modelHazir
+
     /** Yeni kare kabul edilebilir mi? */
     val hazir: Boolean get() = modelHazir && !mesgul
 
@@ -98,7 +104,9 @@ class AltyaziHatti(
                         !atla(k.centerX(), k.centerY())
                     }
                     .map { it.text }
-                metinGeldi(MetinIsleme.parcalariTemizle(satirlar))
+                val metin = MetinIsleme.parcalariTemizle(satirlar)
+                sonOkunan = metin
+                metinGeldi(metin)
             }
             .addOnFailureListener(isciExec) { kirpik.recycle(); mesgul = false }
     }
