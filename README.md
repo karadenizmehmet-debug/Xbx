@@ -11,6 +11,10 @@ Xbox oyunlarındaki İngilizce altyazıyı Türkçeye çeviren telefon uygulamas
 3. Metni cihazda İngilizceden Türkçeye çevirir (ML Kit Translate, internetsiz).
 4. Çeviriyi Wi-Fi üzerinden TV uygulamasına gönderir: `POST http://<tv-ip>:8765/sub`, gövde `{"text": "...", "orijinal": "..."}`. Boş `text` altyazıyı ekrandan kaldırır.
 
+## TV'yi bulma
+
+IP yazmaya gerek yok: TV'de Altyazı açıkken telefon aynı Wi-Fi'daki TV'yi adıyla listeler (NSD, `_altyazi._tcp`). Dokunup seç; TV'nin IP'si değişirse uygulama aynı adla yeniden bulur.
+
 ## Kurulum
 
 [Releases](../../releases) sayfasından `Altyazi-vX.Y.Z.apk` dosyasını indirip kur. Her push'ta GitHub Actions APK'yı yeniden derler.

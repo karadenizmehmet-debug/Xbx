@@ -17,6 +17,11 @@ class Ayarlar(private val context: Context) {
         get() = p.getString("tv", "") ?: ""
         set(v) = p.edit().putString("tv", v.trim()).apply()
 
+    /** Seçilen TV'nin ağdaki adı; IP değişirse bu adla yeniden bulunur. */
+    var tvAdi: String
+        get() = p.getString("tvAdi", "") ?: ""
+        set(v) = p.edit().putString("tvAdi", v).apply()
+
     var telefondaGoster: Boolean
         get() = p.getBoolean("telefonda", true)
         set(v) = p.edit().putBoolean("telefonda", v).apply()

@@ -87,6 +87,8 @@ class AltyaziServisi : Service() {
 
         sunucu = Sunucu(PORT) { yol, govde -> istek(yol, govde) }.also { it.start() }
         sunucuCalisiyor = true
+        // Telefon TV'yi adıyla bulsun (IP yazmaya gerek kalmasın)
+        duyurucu = Duyurucu(this).also { it.baslat(PORT) }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -338,7 +340,10 @@ class AltyaziServisi : Service() {
         ana.postDelayed(gizle, if (sure > 0) sure else GUVENLIK_GIZLE_MS)
     }
 
+    private var duyurucu: Duyurucu? = null
+
     override fun onDestroy() {
+        duyurucu?.durdur(); duyurucu = null
         sunucu?.durdur(); sunucu = null
         testiBitir()
         sunucuCalisiyor = false

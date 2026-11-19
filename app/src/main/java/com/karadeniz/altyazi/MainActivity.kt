@@ -51,6 +51,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var baslatDugme: MaterialButton
     private lateinit var tvAlan: EditText
     private val tv = TvGonderici()
+    private lateinit var tvListesi: LinearLayout
+    private lateinit var tvBilgi: TextView
+    private val bulunanTvler = linkedMapOf<String, TvBulucu.TvCihaz>()
+    private var bulucu: TvBulucu? = null
 
     private val ekranIzni = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -90,10 +94,15 @@ class MainActivity : AppCompatActivity() {
             sonYazi.visibility = View.VISIBLE
         }
         dugmeyiGuncelle()
+        bulunanTvler.clear()
+        bulucu = TvBulucu(this, ::tvBulundu, ::tvKayboldu).also { it.baslat() }
+        // Birkaç saniye içinde hiçbir şey bulunmazsa kullanıcıya söyle
+        tvListesi.postDelayed({ if (bulunanTvler.isEmpty()) tvListesiniCiz() }, 5000)
     }
 
     override fun onPause() {
         super.onPause()
+        bulucu?.durdur(); bulucu = null
         Durum.dinleyici = null
         Durum.sonCeviriDinleyici = null
     }
@@ -320,11 +329,58 @@ class MainActivity : AppCompatActivity() {
             visibility = View.GONE
             setPadding(dp(4), dp(8), 0, 0)
         }
+        tvBilgi = yazi("Ağdaki TV'ler aranıyor…", 13f, soluk = true).apply { setPadding(dp(4), 0, 0, dp(6)) }
+        tvListesi = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val kaydir = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(tvListesi)
+        }
         return kart(
             yuzey(),
             baslik("Android TV", "TV'deki Altyazı uygulaması açık olmalı"),
-            giris, ust(test, 10), tvSonuc
+            tvBilgi, kaydir, ust(giris, 10), ust(test, 10), tvSonuc
         )
+    }
+
+    // ---------- TV bulma (IP yazmadan) ----------
+
+    private fun tvBulundu(c: TvBulucu.TvCihaz) {
+        bulunanTvler[c.ad] = c
+        // Kayıtlı TV'nin IP'si değiştiyse sessizce güncelle; hiç TV seçilmemişse ilk bulunanı seç
+        if (c.ad == ayar.tvAdi && c.adres != ayar.tvAdresi) tvSec(c, bildir = false)
+        else if (ayar.tvAdresi.isBlank()) tvSec(c, bildir = true)
+        tvListesiniCiz()
+    }
+
+    private fun tvSec(c: TvBulucu.TvCihaz, bildir: Boolean) {
+        ayar.tvAdi = c.ad
+        ayar.tvAdresi = c.adres
+        tvAlan.setText(c.adres)
+        if (bildir) kisa("TV seçildi: ${c.ad}")
+        tvListesiniCiz()
+    }
+
+    private fun tvListesiniCiz() {
+        tvListesi.removeAllViews()
+        tvBilgi.text = if (bulunanTvler.isEmpty())
+            "Ağda TV bulunamadı. TV'de Altyazı açık mı, aynı Wi-Fi'da mı?"
+        else "Ağdaki TV'ler (dokunup seç):"
+        bulunanTvler.values.forEach { c ->
+            val secili = c.adres == ayar.tvAdresi
+            val t = TextView(this).apply {
+                text = (if (secili) "✓ " else "📺 ") + c.ad
+                textSize = 14f
+                setPadding(dp(16), dp(10), dp(16), dp(10))
+                background = yuvarlak(renk(if (secili) MR.attr.colorPrimary else MR.attr.colorSurfaceVariant), 22)
+                setTextColor(renk(if (secili) MR.attr.colorOnPrimary else MR.attr.colorOnSurfaceVariant))
+                setOnClickListener { tvSec(c, bildir = true) }
+            }
+            tvListesi.addView(t, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(8) })
+        }
+    }
+
+    private fun tvKayboldu(ad: String) {
+        if (bulunanTvler.remove(ad) != null) tvListesiniCiz()
     }
 
     private fun secenekKarti(): View {
