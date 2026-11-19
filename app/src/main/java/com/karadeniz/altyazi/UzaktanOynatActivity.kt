@@ -21,6 +21,8 @@ import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.PermissionRequest
 import android.webkit.RenderProcessGoneDetail
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -46,7 +48,7 @@ import org.json.JSONObject
 class UzaktanOynatActivity : AppCompatActivity() {
 
     companion object {
-        private const val ADRES = "https://play.xbox.com/"
+        private const val ADRES = "https://www.xbox.com/tr-TR/play"
         /** Köprüyü yalnızca Xbox kökenleri kullanabilir (Microsoft giriş sayfaları ve yabancı iframe'ler değil). */
         private val IZINLI_KOKEN = setOf("https://xbox.com", "https://*.xbox.com")
         /** Kırpık kare için üst sınırlar (bozuk/kötü niyetli veriyle bellek taşmasın). */
@@ -280,6 +282,11 @@ class UzaktanOynatActivity : AppCompatActivity() {
                 Toast.makeText(this@UzaktanOynatActivity, "Oyun görüntüsü kapandı. Yeniden başlat.", Toast.LENGTH_LONG).show()
                 finish()
                 return true
+            }
+
+            // Ana sayfa yüklenemezse sebebi durum satırında görünsün
+            override fun onReceivedError(view: WebView, istek: WebResourceRequest, hata: WebResourceError) {
+                if (istek.isForMainFrame) durum("Sayfa açılamadı: ${hata.description} (${istek.url.host})", hata = true)
             }
 
             override fun onPageFinished(view: WebView, url: String) {
