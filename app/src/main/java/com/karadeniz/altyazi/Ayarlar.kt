@@ -85,6 +85,7 @@ class Ayarlar(private val context: Context) {
             .put("yaziRengi", yaziRengi)
             .put("arkaRengi", arkaRengi)
             .put("arkaOpaklik", arkaOpaklik)
+            .put("hiza", JSONArray().put(hizaX.toDouble()).put(hizaY.toDouble()).put(hizaOlcek.toDouble()))
             .put("kutu", JSONArray().put(k.left.toDouble()).put(k.top.toDouble())
                 .put(k.right.toDouble()).put(k.bottom.toDouble()))
     }
@@ -155,6 +156,17 @@ class Ayarlar(private val context: Context) {
 
     private fun oranYaz(on: String, o: Oran) = p.edit()
         .putFloat("${on}l", o.sol).putFloat("${on}t", o.ust).putFloat("${on}r", o.sag).putFloat("${on}b", o.alt).apply()
+
+    /** TV hizalaması (yerinde çeviriler için): kaydırma (ekran oranı, ±0.05) ve ölçek (0.95–1.05). */
+    var hizaX: Float
+        get() = p.getFloat("hizaX", 0f)
+        set(v) = p.edit().putFloat("hizaX", v).apply()
+    var hizaY: Float
+        get() = p.getFloat("hizaY", 0f)
+        set(v) = p.edit().putFloat("hizaY", v).apply()
+    var hizaOlcek: Float
+        get() = p.getFloat("hizaOlcek", 1f)
+        set(v) = p.edit().putFloat("hizaOlcek", v).apply()
 
     /** Uygulama içi modda oyun sesi telefondan gelsin mi? */
     var webSes: Boolean

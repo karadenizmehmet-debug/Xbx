@@ -97,11 +97,11 @@ class YerindeHatti(
             Oran(r.left.toFloat(), r.top.toFloat(), r.right.toFloat(), r.bottom.toFloat()), kirpik.width, kirpik.height, bolge
         )
         val bloklar = sonuc.textBlocks.flatMap { b ->
-            val satirlar = b.lines.mapNotNull { l -> l.boundingBox?.let { YerindeIsleme.dugmeleriAt(l.text) to it } }
+            val satirlar = b.lines.mapNotNull { l -> satirKutusu(l)?.let { YerindeIsleme.dugmeleriAt(l.text) to it } }
                 .filter { it.first.isNotBlank() }
-            if (YerindeIsleme.satirSatirMi(satirlar.map { it.first })) {
-                // Kumanda ipuçları gibi kısa satırlar: her satır kendi yerine
-                satirlar.map { (m, r) -> Blok(m, kutu(r)) }
+            if (YerindeIsleme.satirSatirMi(satirlar.map { it.first }) || (satirlar.size == 1 && b.lines.size == 1)) {
+                // Kumanda ipuçları gibi kısa satırlar: her satır kendi yerine, düğme simgesi açıkta kalır
+                satirlar.map { (m, r) -> Blok(m, kutu(r), tekSatir = true) }
             } else {
                 val k = b.boundingBox ?: return@flatMap emptyList()
                 listOf(Blok(satirlar.joinToString(" ") { it.first }.replace(Regex("\\s+"), " ").trim(), kutu(k)))
@@ -122,6 +122,14 @@ class YerindeHatti(
         }
     }
 
+    /** Satırın kutusu, düğme simgesi ("RB", "(L)") hariç: yalnızca yazı kelimelerinin birleşimi. */
+    private fun satirKutusu(l: com.google.mlkit.vision.text.Text.Line): android.graphics.Rect? {
+        val kelimeler = l.elements.filter { !YerindeIsleme.dugmeMi(it.text) }.mapNotNull { it.boundingBox }
+        if (kelimeler.isEmpty()) return l.boundingBox
+        return android.graphics.Rect(kelimeler.minOf { it.left }, kelimeler.minOf { it.top },
+            kelimeler.maxOf { it.right }, kelimeler.maxOf { it.bottom })
+    }
+
     private fun cevir(metin: String): String {
         onbellek[metin]?.let { return it }
         val tr = (if (ayar.cevrimici) try { cevrimici.cevir(metin) } catch (_: Exception) { null } else null)
@@ -140,7 +148,7 @@ class YerindeHatti(
         sonCeviriler = ceviriler
         val dizi = JSONArray()
         bloklar.forEachIndexed { i, b ->
-            dizi.put(JSONObject().put("text", ceviriler[i]).put("kutu", JSONArray()
+            dizi.put(JSONObject().put("text", ceviriler[i]).put("tek", b.tekSatir).put("kutu", JSONArray()
                 .put(b.kutu.sol.toDouble()).put(b.kutu.ust.toDouble())
                 .put(b.kutu.sag.toDouble()).put(b.kutu.alt.toDouble())))
         }
@@ -157,6 +165,9 @@ class YerindeHatti(
     }
 
     fun sifirla() { isciH?.post { takip.sifirla() } }
+
+    /** Görünüm/hizalama değişti: TV'deki blokları yeni stille yeniden çiz. */
+    fun yenidenGonder() { isciH?.post { if (yayinda.isNotEmpty()) yayinla(yayinda) } }
 
     fun kapat() {
         kapandi = true

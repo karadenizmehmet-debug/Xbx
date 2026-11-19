@@ -156,7 +156,8 @@ enum class Alan(val id: String, val ad: String, val minKelimeVarsayilan: Int) {
 }
 
 /** Yerinde çevrilecek bir yazı bloğu: metin ve videodaki yeri (0..1). */
-data class Blok(val metin: String, val kutu: Oran)
+/** [tekSatir]: kısa komut satırı; TV'de tek satıra sığdırılır, kutu orijinalle aynı boyda kalır. */
+data class Blok(val metin: String, val kutu: Oran, val tekSatir: Boolean = false)
 
 object YerindeIsleme {
     /** En az [minKelime] gerçek kelime (2+ harf) içeren blok çevrilir; menü adları ve HUD sayıları elenir. */
@@ -164,6 +165,12 @@ object YerindeIsleme {
         Regex("\\p{L}{2,}").findAll(metin).count() >= minKelime
 
     private val dugmeAdlari = setOf("A", "B", "X", "Y", "LB", "RB", "LT", "RT", "LS", "RS", "L", "R", "L3", "R3")
+
+    /** Kelime kumanda düğmesi mi ("RB", "(L)", tek karakter)? Kutusu çeviri kutusuna katılmaz. */
+    fun dugmeMi(t: String): Boolean {
+        val c = t.trim('(', ')', '[', ']', '<', '>', '·', '•')
+        return c.length <= 1 || c.uppercase() in dugmeAdlari
+    }
 
     /** Satır başındaki/sonundaki kumanda düğmesi adlarını ("RB", "(A)", "L") ve tek karakterlik çöpü atar. */
     fun dugmeleriAt(satir: String): String {

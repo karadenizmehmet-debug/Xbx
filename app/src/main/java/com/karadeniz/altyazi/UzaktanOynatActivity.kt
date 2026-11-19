@@ -75,6 +75,9 @@ class UzaktanOynatActivity : AppCompatActivity() {
     private lateinit var kart: LinearLayout
     /** Oyun akışı açıkken pencere tam 16:9 olur (siyah boşluk kalmaz); giriş/konsol sayfalarında uzun kalır. */
     private var oyunda = false
+    private lateinit var kokGorunum: LinearLayout
+    /** Bölge seçerken oyun penceresi yatay tam ekran olur. */
+    private var tamEkranda = false
     private lateinit var durumNokta: View
     private lateinit var durumYazi: TextView
     private lateinit var ceviri: TextView
@@ -133,6 +136,7 @@ class UzaktanOynatActivity : AppCompatActivity() {
             override fun handleOnBackPressed() {
                 when {
                     karartma != null -> karartmayiKaldir()
+                    tamEkranda -> tamEkrandanCik()
                     web.canGoBack() -> web.goBack()
                     else -> finish()
                 }
@@ -143,7 +147,7 @@ class UzaktanOynatActivity : AppCompatActivity() {
     // ---------- Arayüz ----------
 
     private fun arayuz(): View {
-        val kok = LinearLayout(this).apply {
+        val kok = LinearLayout(this).also { kokGorunum = it }.apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(ARKA)
             fitsSystemWindows = true
@@ -370,14 +374,16 @@ class UzaktanOynatActivity : AppCompatActivity() {
     }
 
     /** Oyunda: pencere video oranında (16:9), boş kalan yeri çeviri kartı alır. Değilse pencere uzun. */
-    private fun pencereyiAyarla(yeni: Boolean) {
-        if (yeni == oyunda) return
+    private fun pencereyiAyarla(yeni: Boolean, zorla: Boolean = false) {
+        if (tamEkranda) return
+        if (yeni == oyunda && !zorla) return
         oyunda = yeni
         val vw = jsDurum.optInt("w", 16).coerceAtLeast(1); val vh = jsDurum.optInt("h", 9).coerceAtLeast(1)
         val wlp = webKap.layoutParams as LinearLayout.LayoutParams
         val klp = kart.layoutParams as LinearLayout.LayoutParams
         if (oyunda) {
-            wlp.height = (webKap.width.coerceAtLeast(1) * vh / vw) + dp(2); wlp.weight = 0f
+            val genislik = resources.displayMetrics.widthPixels - dp(28)
+            wlp.height = (genislik.coerceAtLeast(1) * vh / vw) + dp(2); wlp.weight = 0f
             klp.height = 0; klp.weight = 1f
             ceviri.textSize = 24f; ceviri.maxLines = 6
         } else {
@@ -434,7 +440,52 @@ class UzaktanOynatActivity : AppCompatActivity() {
             .show()
     }
 
+    /** Seçim kolay olsun: oyun penceresi yatay tam ekran; seçim bitince eski hale dön. */
     private fun bolgeSec(alan: Alan = Alan.ALTYAZI) {
+        tamEkranaGec()
+        // Döndürme ve video alanı bildirimi otursun
+        ana.postDelayed({ bolgeSecici(alan) }, 1000)
+    }
+
+    private fun tamEkranaGec() {
+        if (tamEkranda) return
+        tamEkranda = true
+        for (i in 0 until kokGorunum.childCount) {
+            val v = kokGorunum.getChildAt(i)
+            if (v !== webKap) v.visibility = View.GONE
+        }
+        kokGorunum.setPadding(0, 0, 0, 0)
+        webKap.layoutParams = (webKap.layoutParams as LinearLayout.LayoutParams).apply { height = 0; weight = 1f; topMargin = 0 }
+        androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+    }
+
+    private fun tamEkrandanCik() {
+        if (!tamEkranda) return
+        tamEkranda = false
+        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
+            .show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        for (i in 0 until kokGorunum.childCount) {
+            val v = kokGorunum.getChildAt(i)
+            if (v !== webKap && v !== digerAlanlar) v.visibility = View.VISIBLE
+        }
+        kokGorunum.setPadding(dp(14), dp(10), dp(14), dp(12))
+        webKap.layoutParams = (webKap.layoutParams as LinearLayout.LayoutParams).apply { topMargin = dp(10) }
+        // Pencere boyu dikeye göre yeniden hesaplansın
+    }
+
+    /** Yönelim değişti (bölge seçimi bitti): dikey düzende pencere boyunu yeniden hesapla. */
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (!tamEkranda && newConfig.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT)
+            kokGorunum.post { pencereyiAyarla(oyunda, zorla = true) }
+    }
+
+    private fun bolgeSecici(alan: Alan) {
         val ekran = windowManager.maximumWindowMetrics.bounds
         val ew = ekran.width().toFloat(); val eh = ekran.height().toFloat()
         val konum = IntArray(2).also { web.getLocationOnScreen(it) }
@@ -460,6 +511,7 @@ class UzaktanOynatActivity : AppCompatActivity() {
                 jsAyarGonder()
                 durum("Bölge kaydedildi: ${alan.ad}.")
             }
+            tamEkrandanCik()
         }.goster()
     }
 
@@ -503,7 +555,11 @@ class UzaktanOynatActivity : AppCompatActivity() {
         ceviri.typeface = YaziTipleri.getir(this, ayar.yaziTipi)
         if (stilGonderBekliyor) return
         stilGonderBekliyor = true
-        ana.postDelayed({ stilGonderBekliyor = false; hat?.stiliTvyeGonder() }, 150)
+        ana.postDelayed({
+            stilGonderBekliyor = false
+            hat?.stiliTvyeGonder()
+            yerinde.values.forEach { it.yenidenGonder() }
+        }, 150)
     }
 
     /** TV'deki altyazının yeri, boyutu, rengi, arka planı ve yazı tipi. Değişiklik TV'de hemen görünür. */
@@ -562,6 +618,14 @@ class UzaktanOynatActivity : AppCompatActivity() {
         }
         renkleriCiz()
         panel.addView(renkSatiri)
+
+        panel.addView(etiket("TV hizalaması (telefon/bildirim çevirileri orijinalin üstüne oturmuyorsa)"))
+        panel.addView(yazi("Yatay kaydır", 12f, SOLUK))
+        panel.addView(kaydirici(-50, 50, (ayar.hizaX * 1000).toInt()) { ayar.hizaX = it / 1000f; stiliGonder() })
+        panel.addView(yazi("Dikey kaydır", 12f, SOLUK))
+        panel.addView(kaydirici(-50, 50, (ayar.hizaY * 1000).toInt()) { ayar.hizaY = it / 1000f; stiliGonder() })
+        panel.addView(yazi("Ölçek", 12f, SOLUK))
+        panel.addView(kaydirici(90, 110, (ayar.hizaOlcek * 100).toInt()) { ayar.hizaOlcek = it / 100f; stiliGonder() })
 
         listOf(Alan.TELEFON, Alan.BILDIRIM).forEach { a ->
             val baslik = etiket("")

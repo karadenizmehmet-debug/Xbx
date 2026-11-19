@@ -312,43 +312,62 @@ class AltyaziServisi : Service() {
         val w = m.widthPixels; val h = m.heightPixels
         val yaziRengi = stil?.optInt("yaziRengi", Color.WHITE) ?: Color.WHITE
         val arkaRengi = stil?.optInt("arkaRengi", Color.BLACK) ?: Color.BLACK
-        // Orijinal yazı görünmesin diye arka plan en az %88 dolu
-        val opak = ((stil?.optInt("arkaOpaklik", 60) ?: 60).coerceAtLeast(88)) * 255 / 100
+        val arka = Color.rgb(Color.red(arkaRengi), Color.green(arkaRengi), Color.blue(arkaRengi))   // tam dolu: orijinal görünmesin
         val tip = yaziTipi(stil?.optString("tip", "varsayilan") ?: "varsayilan")
-        val enAz = h * 0.016f
+        // TV hizalaması: TV görüntüyü kırpıyor/büyütüyorsa (overscan) kutular telefondan ayarlanır
+        val hiza = stil?.optJSONArray("hiza")
+        val hx = hiza?.optDouble(0, 0.0) ?: 0.0
+        val hy = hiza?.optDouble(1, 0.0) ?: 0.0
+        val ho = hiza?.optDouble(2, 1.0) ?: 1.0
+        fun x(v: Double) = ((0.5 + (v - 0.5) * ho + hx) * w)
+        fun y(v: Double) = ((0.5 + (v - 0.5) * ho + hy) * h)
+        val enAz = h * 0.012f
 
         for (i in 0 until bloklar.length()) {
             val b = bloklar.optJSONObject(i) ?: continue
             val metin = b.optString("text", "")
             if (metin.isBlank()) continue
             val kt = b.optJSONArray("kutu") ?: continue
-            val l = (kt.optDouble(0) * w).toInt(); val u = (kt.optDouble(1) * h).toInt()
-            val kw = ((kt.optDouble(2) - kt.optDouble(0)) * w).toInt().coerceAtLeast(40)
-            val kh = ((kt.optDouble(3) - kt.optDouble(1)) * h).toInt().coerceAtLeast(16)
-            val dolgu = (h * 0.004f).toInt()
+            val tek = b.optBoolean("tek", false)
+            // Orijinal yazının kenarları da örtülsün diye kutu her yönden biraz (yüksekliğin %12'si) büyür
+            val ham = arrayOf(x(kt.optDouble(0)), y(kt.optDouble(1)), x(kt.optDouble(2)), y(kt.optDouble(3)))
+            val pay = (ham[3] - ham[1]) * 0.12
+            val l = (ham[0] - pay).toInt(); val u = (ham[1] - pay).toInt()
+            val kw = (ham[2] - ham[0] + pay * 2).toInt().coerceAtLeast(30)
+            val kh = (ham[3] - ham[1] + pay * 2).toInt().coerceAtLeast(14)
+            val dolgu = (kh * 0.08f).toInt().coerceAtLeast(1)
             val t = TextView(this).apply {
                 typeface = tip
                 setTextColor(yaziRengi)
-                gravity = Gravity.CENTER_VERTICAL or Gravity.START
-                setPadding(dolgu * 2, dolgu, dolgu * 2, dolgu)
-                background = GradientDrawable().apply {
-                    cornerRadius = h * 0.008f
-                    setColor(Color.argb(opak, Color.red(arkaRengi), Color.green(arkaRengi), Color.blue(arkaRengi)))
-                }
-                minHeight = kh
+                gravity = if (tek) Gravity.CENTER else Gravity.CENTER_VERTICAL or Gravity.START
+                setPadding(dolgu, 0, dolgu, 0)
+                includeFontPadding = false
+                background = GradientDrawable().apply { cornerRadius = kh * 0.18f; setColor(arka) }
+                if (tek) { maxLines = 1; isSingleLine = true } else minHeight = kh
             }
-            // Kutuya sığan en büyük boyut (orijinal satır yüksekliğinden başla)
-            val ic = kw - dolgu * 4
-            var boyut = (kh * 0.75f).coerceAtMost(h * 0.05f).coerceAtLeast(enAz)
             val boya = TextPaint(t.paint).apply { typeface = tip }
-            while (boyut > enAz && ic > 0) {
-                boya.textSize = boyut
-                if (StaticLayout.Builder.obtain(metin, 0, metin.length, boya, ic).build().height <= kh - dolgu * 2) break
-                boyut -= 1f
+            val ic = (kw - dolgu * 2).coerceAtLeast(1)
+            var boyut: Float
+            if (tek) {
+                // Tek satır: orijinalle aynı kutu; yazı hem eni hem boyu sığana kadar küçülür
+                boyut = kh * 0.72f
+                while (boyut > enAz) {
+                    boya.textSize = boyut
+                    val fm = boya.fontMetrics
+                    if (boya.measureText(metin) <= ic && (fm.descent - fm.ascent) <= kh) break
+                    boyut -= 0.5f
+                }
+            } else {
+                boyut = (kh * 0.6f).coerceAtMost(h * 0.05f).coerceAtLeast(enAz)
+                while (boyut > enAz) {
+                    boya.textSize = boyut
+                    if (StaticLayout.Builder.obtain(metin, 0, metin.length, boya, ic).build().height <= kh) break
+                    boyut -= 1f
+                }
             }
             t.setTextSize(TypedValue.COMPLEX_UNIT_PX, boyut)
             t.text = metin
-            katman.addView(t, FrameLayout.LayoutParams(kw, -2).apply { leftMargin = l; topMargin = u })
+            katman.addView(t, FrameLayout.LayoutParams(kw, if (tek) kh else -2).apply { leftMargin = l; topMargin = u })
         }
         val gizleyici = Runnable { katman.removeAllViews() }
         alanGizleyiciler[id] = gizleyici

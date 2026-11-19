@@ -48,7 +48,7 @@ class BolgeSecici(
             textSize = 15f
         })
         ust.addView(TextView(ctx).apply {
-            text = "Yeni alan için boş yerde sürükle · Taşımak için kutunun içinden sürükle"
+            text = "Köşelerden büyüt/küçült · İçinden sürükleyerek taşı · Boş yerde sürükleyerek yeni alan çiz"
             setTextColor(Color.argb(190, 255, 255, 255))
             textSize = 12f
         })
@@ -97,6 +97,10 @@ class BolgeSecici(
         private var by = 0f
         /** Dokunuş kutunun içinden başladıysa kutu taşınır, dışından başladıysa yeni kutu çizilir. */
         private var tasiniyor = false
+        /** Köşeden tutulduysa hangi köşe: 0 sol-üst, 1 sağ-üst, 2 sol-alt, 3 sağ-alt; -1 yok. */
+        private var kose = -1
+        private val tutamakYaricap = 26f * ctx.resources.displayMetrics.density
+        private val tutamak = Paint().apply { color = Color.rgb(255, 214, 0); style = Paint.Style.FILL; isAntiAlias = true }
         private var ilkOran = RectF()
 
         fun bolgeOran(): RectF = RectF(oran)
@@ -109,6 +113,9 @@ class BolgeSecici(
             c.drawRect(0f, r.top, r.left, r.bottom, golge)
             c.drawRect(r.right, r.top, w, r.bottom, golge)
             c.drawRect(r, cerceve)
+            val ky = tutamakYaricap * 0.45f
+            for ((x, y) in listOf(r.left to r.top, r.right to r.top, r.left to r.bottom, r.right to r.bottom))
+                c.drawCircle(x, y, ky, tutamak)
         }
 
         @SuppressLint("ClickableViewAccessibility")
@@ -118,9 +125,20 @@ class BolgeSecici(
                 MotionEvent.ACTION_DOWN -> {
                     bx = e.x; by = e.y
                     ilkOran = RectF(oran)
-                    tasiniyor = RectF(oran.left * w, oran.top * h, oran.right * w, oran.bottom * h).contains(e.x, e.y)
+                    val px = RectF(oran.left * w, oran.top * h, oran.right * w, oran.bottom * h)
+                    val koseler = listOf(px.left to px.top, px.right to px.top, px.left to px.bottom, px.right to px.bottom)
+                    kose = koseler.indexOfFirst { (x, y) -> Math.hypot((e.x - x).toDouble(), (e.y - y).toDouble()) <= tutamakYaricap * 1.6 }
+                    tasiniyor = kose < 0 && px.contains(e.x, e.y)
                 }
-                MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP -> if (tasiniyor) {
+                MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP -> if (kose >= 0) {
+                    // Köşeden boyutlandır: karşı köşe sabit, en az %3 × %2
+                    val x = (e.x / w).coerceIn(0f, 1f); val y = (e.y / h).coerceIn(0f, 1f)
+                    var l = ilkOran.left; var t = ilkOran.top; var r = ilkOran.right; var b = ilkOran.bottom
+                    if (kose == 0 || kose == 2) l = minOf(x, r - 0.03f) else r = maxOf(x, l + 0.03f)
+                    if (kose == 0 || kose == 1) t = minOf(y, b - 0.02f) else b = maxOf(y, t + 0.02f)
+                    oran = RectF(l, t, r, b)
+                    invalidate()
+                } else if (tasiniyor) {
                     // Boyutu koruyarak taşı, ekran dışına taşmasın
                     val dx = ((e.x - bx) / w).coerceIn(-ilkOran.left, 1f - ilkOran.right)
                     val dy = ((e.y - by) / h).coerceIn(-ilkOran.top, 1f - ilkOran.bottom)
