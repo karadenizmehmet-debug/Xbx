@@ -96,7 +96,10 @@ class YerindeHatti(
         val bloklar = sonuc.textBlocks.flatMap { b ->
             val satirlar = b.lines.filter { YerindeIsleme.dugmeleriAt(it.text).isNotBlank() }
             val metinler = satirlar.map { YerindeIsleme.dugmeleriAt(it.text) }
-            if (YerindeIsleme.satirSatirMi(metinler) || (satirlar.size == 1 && b.lines.size == 1)) {
+            // Satır satır yalnızca Bildirim'de (kumanda ipuçları). Telefonda bir balon/kart tek parça çevrilir:
+            // "Stoplight Parrotfish / Spot" iki kısa satır olsa da tek başlıktır.
+            val satirSatir = alan == Alan.BILDIRIM && YerindeIsleme.satirSatirMi(metinler)
+            if (satirSatir || (satirlar.size == 1 && b.lines.size == 1)) {
                 // Kumanda ipuçları gibi kısa satırlar: her satır kendi yerine, düğme simgesi açıkta kalır
                 satirlar.mapIndexedNotNull { i, l -> satirKoseleri(l)?.let { blokYap(metinler[i], it, kirpik, bolge, true) } }
             } else {

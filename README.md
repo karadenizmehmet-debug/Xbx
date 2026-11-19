@@ -16,7 +16,7 @@ Xbox oyunlarındaki İngilizce altyazıyı Türkçeye çeviren telefon uygulamas
 Uygulama içi modda üç alan ayrı ayrı açılıp kapatılır, her birinin okuma bölgesi ayrı seçilir (Bölge → alan):
 
 - **Altyazı:** Tek metin, TV'de kendi kutusunda (Görünüm'den taşınır).
-- **Telefon:** Oyundaki telefon. Her mesaj balonu ayrı çevrilip TV'de orijinalin tam üstüne yazılır. Ana menü gibi kısa yazılar (varsayılan 3 kelimeden az) çevrilmez.
+- **Telefon:** Oyundaki telefon. Her mesaj balonu ayrı çevrilip TV'de orijinalin tam üstüne yazılır. Ana menü gibi kısa yazılar (varsayılan 2 kelimeden az) çevrilmez.
 - **Bildirim:** Sağ alttaki bildirimler, orijinalin üstüne (tek kelimelik ipuçları dahil; sayılar hariç).
 
 TV'nin görüntü formatı "Tam piksel / Just scan" olmalı; aksi halde yerinde çeviriler biraz kayar.

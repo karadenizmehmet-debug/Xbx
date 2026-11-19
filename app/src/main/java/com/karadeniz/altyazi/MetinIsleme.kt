@@ -149,7 +149,7 @@ object Sansur {
 /** Çevrilen ekran alanları. Altyazı tek metin olarak kendi kutusunda; diğerleri yerinde (orijinalin üstünde). */
 enum class Alan(val id: String, val ad: String, val minKelimeVarsayilan: Int) {
     ALTYAZI("altyazi", "Altyazı", 1),
-    TELEFON("telefon", "Telefon", 3),
+    TELEFON("telefon", "Telefon", 2),
     BILDIRIM("bildirim", "Bildirim", 1);
 
     companion object { fun bul(id: String): Alan? = entries.firstOrNull { it.id == id } }
