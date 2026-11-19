@@ -149,7 +149,7 @@ class AltyaziHatti(
         ekrandaMetinVar = tr.isNotBlank()
         sonTr = tr
         val adres = tvAdresi()
-        if (adres.isNotBlank()) tv.gonder(adres, tr, orijinal, ayar.stilJson())
+        if (adres.isNotBlank()) tv.gonder(adres, tr, orijinal, ayar.stilJson()) { ok, bilgi -> tvSonucu(adres, ok, bilgi) }
         ana.post {
             gosterildi(tr, orijinal)
             Durum.sonCeviriDinleyici?.invoke(orijinal, tr)
@@ -161,6 +161,19 @@ class AltyaziHatti(
 
     /** Bölge değişti: aynı altyazı yeniden çevrilebilsin. */
     fun sifirla() { isciH?.post { takip.sifirla() } }
+
+    @Volatile private var tvSonOk: Boolean? = null
+
+    /** TV'ye gönderim durumu değişince (ulaşıldı ⇄ ulaşılamadı) kullanıcıya bir kez söyle. */
+    private fun tvSonucu(adres: String, ok: Boolean, bilgi: String) {
+        if (tvSonOk == ok) return
+        tvSonOk = ok
+        durum(when {
+            ok -> "Çeviri TV'ye gidiyor ($adres)."
+            bilgi == "HTTP 503" -> "TV'ye ulaşıldı ama TV'de katman (üstte gösterme) izni yok."
+            else -> "TV'ye ulaşılamadı ($adres): $bilgi. TV'de Altyazı açık mı?"
+        })
+    }
 
     /** Görünüm değişti: ekrandaki çeviriyi (yoksa 2,5 sn'lik örneği) TV'ye yeniden gönder. */
     fun stiliTvyeGonder() {

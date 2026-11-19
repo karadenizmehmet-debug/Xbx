@@ -516,8 +516,8 @@ class UzaktanOynatActivity : AppCompatActivity() {
         ana.post {
             durumYazi.text = s
             val renk = when {
-                hata || s.contains("indirilemedi") || s.contains("hata", true) -> KIRMIZI
-                s.startsWith("Hazır") || s.startsWith("Bağlandı") || s.startsWith("Bölge") -> YESIL
+                hata || s.contains("indirilemedi") || s.contains("hata", true) || s.contains("ulaşılamadı") || s.contains("izni yok") -> KIRMIZI
+                s.startsWith("Hazır") || s.startsWith("Bağlandı") || s.startsWith("Bölge") || s.startsWith("Çeviri TV'ye") -> YESIL
                 else -> SARI
             }
             durumNokta.background = yuvarlak(renk, 6)
