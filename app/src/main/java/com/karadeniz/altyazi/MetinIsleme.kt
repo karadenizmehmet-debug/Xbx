@@ -150,7 +150,7 @@ object Sansur {
 enum class Alan(val id: String, val ad: String, val minKelimeVarsayilan: Int) {
     ALTYAZI("altyazi", "Altyazı", 1),
     TELEFON("telefon", "Telefon", 3),
-    BILDIRIM("bildirim", "Bildirim", 2);
+    BILDIRIM("bildirim", "Bildirim", 1);
 
     companion object { fun bul(id: String): Alan? = entries.firstOrNull { it.id == id } }
 }

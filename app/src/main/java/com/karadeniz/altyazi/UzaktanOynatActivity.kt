@@ -374,6 +374,21 @@ class UzaktanOynatActivity : AppCompatActivity() {
     }
 
     /** Oyunda: pencere video oranında (16:9), boş kalan yeri çeviri kartı alır. Değilse pencere uzun. */
+    /** WebView'ın sayfaya göre büyüklüğü / ekrandaki büyüklüğü (2 = sayfa iki kat geniş görür). */
+    @Volatile private var webKat = 1
+
+    private fun webOlcekle(kat: Int, genislik: Int = 0, yukseklik: Int = 0) {
+        webKat = kat
+        web.pivotX = 0f; web.pivotY = 0f
+        if (kat == 1) {
+            web.layoutParams = FrameLayout.LayoutParams(-1, -1)
+            web.scaleX = 1f; web.scaleY = 1f
+        } else {
+            web.layoutParams = FrameLayout.LayoutParams(genislik * kat, yukseklik * kat)
+            web.scaleX = 1f / kat; web.scaleY = 1f / kat
+        }
+    }
+
     private fun pencereyiAyarla(yeni: Boolean, zorla: Boolean = false) {
         if (tamEkranda) return
         if (yeni == oyunda && !zorla) return
@@ -383,11 +398,15 @@ class UzaktanOynatActivity : AppCompatActivity() {
         val klp = kart.layoutParams as LinearLayout.LayoutParams
         if (oyunda) {
             val genislik = resources.displayMetrics.widthPixels - dp(28)
-            wlp.height = (genislik.coerceAtLeast(1) * vh / vw) + dp(2); wlp.weight = 0f
+            val yukseklik = genislik.coerceAtLeast(1) * vh / vw
+            wlp.height = yukseklik + dp(2); wlp.weight = 0f
+            // xCloud küçük pencerede "Burası biraz dar" der: sayfayı 2 kat büyük çizip yarıya küçült
+            webOlcekle(2, genislik, yukseklik)
             klp.height = 0; klp.weight = 1f
             ceviri.textSize = 24f; ceviri.maxLines = 6
         } else {
             wlp.height = 0; wlp.weight = 1f
+            webOlcekle(1)
             klp.height = LinearLayout.LayoutParams.WRAP_CONTENT; klp.weight = 0f
             ceviri.textSize = 20f; ceviri.maxLines = 4
         }
@@ -455,6 +474,7 @@ class UzaktanOynatActivity : AppCompatActivity() {
             if (v !== webKap) v.visibility = View.GONE
         }
         kokGorunum.setPadding(0, 0, 0, 0)
+        webOlcekle(1)
         webKap.layoutParams = (webKap.layoutParams as LinearLayout.LayoutParams).apply { height = 0; weight = 1f; topMargin = 0 }
         androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).apply {
             hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
@@ -492,7 +512,8 @@ class UzaktanOynatActivity : AppCompatActivity() {
         val wx = konum[0].toFloat(); val wy = konum[1].toFloat()
         val v = videoAlani.takeIf { it.sag > it.sol }
             ?: Oran(0f, 0f, web.width.toFloat(), web.height.toFloat())
-        val videoEkranda = Oran(v.sol + wx, v.ust + wy, v.sag + wx, v.alt + wy)
+        val k = 1f / webKat   // WebView küçültülmüşse sayfa pikselleri ekranda k kadar
+        val videoEkranda = Oran(v.sol * k + wx, v.ust * k + wy, v.sag * k + wx, v.alt * k + wy)
         val baslangicPx = MetinIsleme.videodanEkrana(ayar.alanBolge(alan), videoEkranda)
         val baslangic = RectF(baslangicPx.sol / ew, baslangicPx.ust / eh, baslangicPx.sag / ew, baslangicPx.alt / eh)
         BolgeSecici(

@@ -17,7 +17,7 @@ Uygulama içi modda üç alan ayrı ayrı açılıp kapatılır, her birinin oku
 
 - **Altyazı:** Tek metin, TV'de kendi kutusunda (Görünüm'den taşınır).
 - **Telefon:** Oyundaki telefon. Her mesaj balonu ayrı çevrilip TV'de orijinalin tam üstüne yazılır. Ana menü gibi kısa yazılar (varsayılan 3 kelimeden az) çevrilmez.
-- **Bildirim:** Sağ alttaki bildirimler, orijinalin üstüne (en az 2 kelime).
+- **Bildirim:** Sağ alttaki bildirimler, orijinalin üstüne (tek kelimelik ipuçları dahil; sayılar hariç).
 
 TV'nin görüntü formatı "Tam piksel / Just scan" olmalı; aksi halde yerinde çeviriler biraz kayar.
 
