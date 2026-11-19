@@ -93,15 +93,21 @@ class YerindeHatti(
         val t = tanima ?: return
         val sonuc = Tasks.await(t.process(InputImage.fromBitmap(kirpik, 0)))
         val min = ayar.minKelime(alan)
-        val bloklar = sonuc.textBlocks.mapNotNull { b ->
-            val metin = b.lines.joinToString(" ") { it.text }.replace(Regex("\\s+"), " ").trim()
-            val k = b.boundingBox ?: return@mapNotNull null
-            if (!YerindeIsleme.uygunMu(metin, min)) return@mapNotNull null
-            Blok(metin, YerindeIsleme.kirpiktanVideoya(
-                Oran(k.left.toFloat(), k.top.toFloat(), k.right.toFloat(), k.bottom.toFloat()),
-                kirpik.width, kirpik.height, bolge
-            ))
-        }.sortedWith(compareBy({ it.kutu.ust }, { it.kutu.sol }))
+        fun kutu(r: android.graphics.Rect) = YerindeIsleme.kirpiktanVideoya(
+            Oran(r.left.toFloat(), r.top.toFloat(), r.right.toFloat(), r.bottom.toFloat()), kirpik.width, kirpik.height, bolge
+        )
+        val bloklar = sonuc.textBlocks.flatMap { b ->
+            val satirlar = b.lines.mapNotNull { l -> l.boundingBox?.let { YerindeIsleme.dugmeleriAt(l.text) to it } }
+                .filter { it.first.isNotBlank() }
+            if (YerindeIsleme.satirSatirMi(satirlar.map { it.first })) {
+                // Kumanda ipuçları gibi kısa satırlar: her satır kendi yerine
+                satirlar.map { (m, r) -> Blok(m, kutu(r)) }
+            } else {
+                val k = b.boundingBox ?: return@flatMap emptyList()
+                listOf(Blok(satirlar.joinToString(" ") { it.first }.replace(Regex("\\s+"), " ").trim(), kutu(k)))
+            }
+        }.filter { YerindeIsleme.uygunMu(it.metin, min) }
+            .sortedWith(compareBy({ it.kutu.ust }, { it.kutu.sol }))
         sonOkunan = bloklar.joinToString(" | ") { it.metin }
 
         when (val k = takip.gelen(bloklar.joinToString(" | ") { it.metin }, ayar.aralikMs)) {

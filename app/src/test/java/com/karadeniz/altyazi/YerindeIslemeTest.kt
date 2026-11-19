@@ -26,4 +26,17 @@ class YerindeIslemeTest {
         assertFalse(YerindeIsleme.kaydiMi(a, listOf(Blok("x", Oran(0.105f, 0.1f, 0.2f, 0.2f)))))
         assertTrue(YerindeIsleme.kaydiMi(a, listOf(Blok("x", Oran(0.1f, 0.15f, 0.2f, 0.25f)))))
     }
+
+    @Test fun kumandaDugmeleriAtilir() {
+        assertEquals("CLOSE CLAW", YerindeIsleme.dugmeleriAt("CLOSE CLAW RB"))
+        assertEquals("MOVE ARM", YerindeIsleme.dugmeleriAt("MOVE ARM (L)"))
+        assertEquals("SET DESTINATION", YerindeIsleme.dugmeleriAt("SET DESTINATION A"))
+        assertEquals("I see you", YerindeIsleme.dugmeleriAt("I see you"))
+    }
+
+    @Test fun komutSatirlariAyriCevrilir() {
+        assertTrue(YerindeIsleme.satirSatirMi(listOf("CLOSE CLAW", "MOVE ARM")))
+        assertFalse(YerindeIsleme.satirSatirMi(listOf("Hey, are you coming to the party", "tonight or not?")))
+        assertFalse(YerindeIsleme.satirSatirMi(listOf("Mission passed")))
+    }
 }

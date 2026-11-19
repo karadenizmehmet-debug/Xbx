@@ -163,6 +163,32 @@ object YerindeIsleme {
     fun uygunMu(metin: String, minKelime: Int): Boolean =
         Regex("\\p{L}{2,}").findAll(metin).count() >= minKelime
 
+    private val dugmeAdlari = setOf("A", "B", "X", "Y", "LB", "RB", "LT", "RT", "LS", "RS", "L", "R", "L3", "R3")
+
+    /** Satır başındaki/sonundaki kumanda düğmesi adlarını ("RB", "(A)", "L") ve tek karakterlik çöpü atar. */
+    fun dugmeleriAt(satir: String): String {
+        val p = satir.split(Regex("\\s+")).filter { it.isNotEmpty() }.toMutableList()
+        // Sonda: düğme adı ya da tek karakter. Başta: yalnızca parantezli ya da iki harfli düğme adı
+        // (başta tek "A"/"I" cümlenin parçası olabilir: "A man...", "I see you").
+        fun dugme(t: String, sonda: Boolean): Boolean {
+            val c = t.trim('(', ')', '[', ']', '<', '>', '·', '•')
+            if (c.isEmpty()) return true
+            val parantezli = t != c
+            return if (sonda) c.length <= 1 || c.uppercase() in dugmeAdlari
+            else (parantezli && c.uppercase() in dugmeAdlari) || (c.length == 2 && c in dugmeAdlari)
+        }
+        while (p.isNotEmpty() && dugme(p.last(), sonda = true)) p.removeAt(p.size - 1)
+        while (p.isNotEmpty() && dugme(p.first(), sonda = false)) p.removeAt(0)
+        return p.joinToString(" ")
+    }
+
+    /**
+     * Blok kısa komut satırlarından mı oluşuyor ("CLOSE CLAW", "MOVE ARM")? O zaman her satır ayrı çevrilir;
+     * yoksa (mesaj balonu, cümle) satırlar birleştirilip tek metin olarak çevrilir.
+     */
+    fun satirSatirMi(satirlar: List<String>): Boolean =
+        satirlar.size > 1 && satirlar.all { Regex("\\p{L}{2,}").findAll(it).count() <= 3 && !it.trimEnd().endsWith(",") }
+
     /** OCR kutusu (kırpık pikseli) → video oranı. */
     fun kirpiktanVideoya(kutu: Oran, kirpikG: Int, kirpikY: Int, bolge: Oran): Oran {
         val g = kirpikG.coerceAtLeast(1).toFloat(); val y = kirpikY.coerceAtLeast(1).toFloat()
