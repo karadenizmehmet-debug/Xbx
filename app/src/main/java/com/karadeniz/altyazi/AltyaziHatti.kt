@@ -45,6 +45,7 @@ class AltyaziHatti(
     private val takip = KararlilikTakip()
 
     @Volatile private var mesgul = false
+    @Volatile private var kapandi = false
     @Volatile var ekrandaMetinVar = false
         private set
     @Volatile var sonTr = ""
@@ -66,6 +67,7 @@ class AltyaziHatti(
         durum("Çeviri modeli hazırlanıyor (ilk seferde ~30 MB iner)…")
         cevirmen!!.downloadModelIfNeeded(DownloadConditions.Builder().build())
             .addOnSuccessListener {
+                if (kapandi) return@addOnSuccessListener
                 modelHazir = true
                 durum("Hazır. Altyazılar okunuyor.")
             }
@@ -80,7 +82,14 @@ class AltyaziHatti(
         val t = tanima
         if (!hazir || t == null) { kirpik.recycle(); return }
         mesgul = true
-        t.process(InputImage.fromBitmap(kirpik, 0))
+        val gorev = try {
+            t.process(InputImage.fromBitmap(kirpik, 0))
+        } catch (e: Exception) {
+            kirpik.recycle(); mesgul = false
+            durum("Okuma hatası: ${e.message}")
+            return
+        }
+        gorev
             .addOnSuccessListener(isciExec) { sonuc ->
                 kirpik.recycle()
                 val satirlar = sonuc.textBlocks.flatMap { it.lines }
@@ -103,7 +112,7 @@ class AltyaziHatti(
     }
 
     private fun cevir(metin: String) {
-        if (ayar.cevrimici) {
+        if (ayar.cevrimici && !agIsi.isShutdown) {
             agIsi.execute {
                 val tr = try { cevrimici.cevir(metin) } catch (_: Exception) { null }
                 isciH?.post {
@@ -139,6 +148,9 @@ class AltyaziHatti(
         }
     }
 
+    /** Görüntü kesildi (bağlantı koptu, uygulama arka planda): ekrandaki çeviriyi TV'den ve telefondan sil. */
+    fun temizle() { isciH?.post { if (takip.zorlaTemizle()) yayinla("", "") } }
+
     /** Bölge değişti: aynı altyazı yeniden çevrilebilsin. */
     fun sifirla() { isciH?.post { takip.sifirla() } }
 
@@ -150,14 +162,26 @@ class AltyaziHatti(
         else tv.gonder(adres, "Örnek altyazı metni", "", ayar.stilJson(), 2500)
     }
 
+    /**
+     * Hattı kapatır. Kapatma işi hat iş parçacığına sıraya konur: o an çalışan bir
+     * OCR/çeviri dinleyicisi bitmeden yürütücüler kapanmaz (RejectedExecutionException olmaz).
+     */
     fun kapat() {
+        kapandi = true
         modelHazir = false
-        isciH?.removeCallbacksAndMessages(null)
-        if (ekrandaMetinVar) tv.gonder(tvAdresi(), "", "")
-        tanima?.close(); cevirmen?.close()
-        tanima = null; cevirmen = null
-        isci?.quitSafely(); isci = null; isciH = null
-        agIsi.shutdown()
-        tv.kapat()
+        val h = isciH
+        val t = isci
+        isciH = null; isci = null
+        val kapatIsi = Runnable {
+            if (ekrandaMetinVar) tv.gonder(tvAdresi(), "", "")
+            tanima?.close(); cevirmen?.close()
+            tanima = null; cevirmen = null
+            agIsi.shutdown()
+            tv.kapat()
+        }
+        if (h == null || t == null) { kapatIsi.run(); return }
+        h.removeCallbacksAndMessages(null)
+        h.post(kapatIsi)
+        t.quitSafely()
     }
 }

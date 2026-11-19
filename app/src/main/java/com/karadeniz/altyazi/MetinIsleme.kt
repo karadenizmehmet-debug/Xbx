@@ -79,6 +79,14 @@ class KararlilikTakip(private val bosTemizlemeMs: Long = 1300L) {
         return Karar.Cevir(metin)
     }
 
+    /** Akış kesildi: ekranda çeviri varsa silinmeli (true). Durum sıfırlanır. */
+    fun zorlaTemizle(): Boolean {
+        val vardi = ekrandaMetinVar
+        ekrandaMetinVar = false
+        sifirla()
+        return vardi
+    }
+
     /** Bölge değişti: aynı altyazı yeniden çevrilebilsin. */
     fun sifirla() { sonGonderilen = ""; aday = ""; adaySayac = 0 }
 

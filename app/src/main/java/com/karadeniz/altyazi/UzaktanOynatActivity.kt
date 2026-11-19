@@ -14,12 +14,17 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.graphics.BitmapFactory.Options
 import android.webkit.CookieManager
-import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
+import org.json.JSONObject
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -39,6 +44,11 @@ class UzaktanOynatActivity : AppCompatActivity() {
     companion object {
         private const val ADRES = "https://www.xbox.com/tr-TR/play"
         private const val CUBUK_SURE_MS = 4000L
+        /** Köprüyü yalnızca bu köken kullanabilir (giriş sayfaları ve iframe'ler değil). */
+        private val IZINLI_KOKEN = setOf("https://www.xbox.com")
+        /** Kırpık kare için üst sınırlar (kötü niyetli/bozuk veriyle bellek taşmasın). */
+        private const val EN_COK_BASE64 = 3_000_000
+        private const val EN_COK_KENAR = 4096
     }
 
     private lateinit var ayar: Ayarlar
@@ -51,6 +61,7 @@ class UzaktanOynatActivity : AppCompatActivity() {
     private lateinit var ceviri: TextView
     private val ana = Handler(Looper.getMainLooper())
     private var hat: AltyaziHatti? = null
+    private var webKapandi = false
 
     /** Videonun ekrandaki içerik alanı (fiziksel piksel), JS bildirir. */
     @Volatile private var videoAlani = Oran(0f, 0f, 0f, 0f)
@@ -62,6 +73,10 @@ class UzaktanOynatActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         ayar = Ayarlar(this)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Bölge seçici de çentik alanını kapsıyor; koordinatlar aynı tabanda olsun
+        window.attributes = window.attributes.apply {
+            layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+        }
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.systemBars())
@@ -88,6 +103,11 @@ class UzaktanOynatActivity : AppCompatActivity() {
         kok.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> ceviriYerlestir() }
         setContentView(kok)
 
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            Toast.makeText(this, "Android System WebView güncel değil. Play Store'dan güncelle.", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
         webAyarla()
         hat = AltyaziHatti(this, ayar, ::ceviriGeldi, ::durum).also { it.baslat() }
         web.loadUrl(ADRES)
@@ -100,7 +120,7 @@ class UzaktanOynatActivity : AppCompatActivity() {
         })
     }
 
-    @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
+    @SuppressLint("SetJavaScriptEnabled")
     private fun webAyarla() {
         CookieManager.getInstance().apply {
             setAcceptCookie(true)
@@ -117,8 +137,21 @@ class UzaktanOynatActivity : AppCompatActivity() {
             // "; wv" ve "Version/4.0" WebView'ı ele verir; Chrome mobil gibi görün
             userAgentString = userAgentString.replace("; wv", "").replace(Regex("Version/\\S+ "), "")
         }
-        web.addJavascriptInterface(Kopru(), "AltyaziKopru")
+        WebViewCompat.addWebMessageListener(web, "AltyaziKopru", IZINLI_KOKEN) { _, mesaj, _, anaCerceve, _ ->
+            if (anaCerceve) mesajGeldi(mesaj.data ?: return@addWebMessageListener)
+        }
         web.webViewClient = object : WebViewClient() {
+            // Görüntü işlemi çökerse uygulamayı da çökertme
+            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                hat?.kapat(); hat = null
+                webKapandi = true
+                kok.removeView(view)
+                view.destroy()
+                Toast.makeText(this@UzaktanOynatActivity, "Oyun görüntüsü kapandı. Yeniden başlat.", Toast.LENGTH_LONG).show()
+                finish()
+                return true
+            }
+
             override fun onPageFinished(view: WebView, url: String) {
                 // Yalnızca Xbox sayfalarına enjekte et; Microsoft giriş sayfalarına asla
                 val host = Uri.parse(url).host ?: return
@@ -136,32 +169,40 @@ class UzaktanOynatActivity : AppCompatActivity() {
         web.evaluateJavascript(js, null)
     }
 
-    /** JS → Kotlin köprüsü. Metotlar WebView'ın arka plan iş parçacığında çalışır. */
-    private inner class Kopru {
-        @JavascriptInterface fun aralik(): Int = ayar.aralikMs.toInt()
-
-        @JavascriptInterface fun hazir(): Boolean = hat?.hazir == true
-
-        @JavascriptInterface fun video(sol: Float, ust: Float, sag: Float, alt: Float) {
-            videoAlani = Oran(sol, ust, sag, alt)
+    /** JS → Kotlin mesajları (ana iş parçacığı; yalnızca www.xbox.com ana çerçevesinden). */
+    private fun mesajGeldi(veri: String) {
+        val m = try { JSONObject(veri) } catch (_: Exception) { return }
+        when (m.optString("t")) {
+            "kare" -> kareGeldi(m.optString("d"))
+            "video" -> {
+                val a = m.optJSONArray("a") ?: return
+                if (a.length() == 4) videoAlani = Oran(
+                    a.optDouble(0).toFloat(), a.optDouble(1).toFloat(),
+                    a.optDouble(2).toFloat(), a.optDouble(3).toFloat()
+                )
+            }
+            "temizle" -> hat?.temizle()
+            "hata" -> durum("Görüntü okunamıyor: ${m.optString("m")}")
+            "yuklendi" -> { jsAyarGonder(); durum("Bağlandı. Konsolunu seçip uzaktan oynatmayı başlat.") }
         }
+    }
 
-        @JavascriptInterface fun kare(base64Jpeg: String) {
-            val h = hat ?: return
-            val bayt = try { Base64.decode(base64Jpeg, Base64.DEFAULT) } catch (_: Exception) { return }
-            val bmp = BitmapFactory.decodeByteArray(bayt, 0, bayt.size) ?: return
-            h.isle(bmp)
-        }
-
-        @JavascriptInterface fun yuklendi() {
-            ana.post { jsAyarGonder(); durum("Bağlandı. Konsolunu seçip uzaktan oynatmayı başlat.") }
-        }
+    private fun kareGeldi(base64Jpeg: String) {
+        val h = hat ?: return
+        if (!h.hazir || base64Jpeg.isEmpty() || base64Jpeg.length > EN_COK_BASE64) return
+        val bayt = try { Base64.decode(base64Jpeg, Base64.DEFAULT) } catch (_: Exception) { return }
+        val sinir = Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bayt, 0, bayt.size, sinir)
+        if (sinir.outWidth !in 1..EN_COK_KENAR || sinir.outHeight !in 1..EN_COK_KENAR) return
+        val bmp = BitmapFactory.decodeByteArray(bayt, 0, bayt.size) ?: return
+        h.isle(bmp)
     }
 
     private fun jsAyarGonder() {
         val b = ayar.webBolge
         web.evaluateJavascript(
-            "window.__altyazi && (__altyazi.bolge(${b.sol},${b.ust},${b.sag},${b.alt}), __altyazi.ses(${ayar.webSes}))",
+            "window.__altyazi && (__altyazi.bolge(${b.sol},${b.ust},${b.sag},${b.alt}), " +
+                "__altyazi.ses(${ayar.webSes}), __altyazi.aralik(${ayar.aralikMs}))",
             null
         )
     }
@@ -272,12 +313,14 @@ class UzaktanOynatActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (webKapandi) return
         web.onResume()
         web.evaluateJavascript("window.__altyazi && __altyazi.devam()", null)
     }
 
     override fun onPause() {
-        web.evaluateJavascript("window.__altyazi && __altyazi.dur()", null)
+        if (!webKapandi) web.evaluateJavascript("window.__altyazi && __altyazi.dur()", null)
+        hat?.temizle()
         CookieManager.getInstance().flush()
         super.onPause()
     }
@@ -285,8 +328,7 @@ class UzaktanOynatActivity : AppCompatActivity() {
     override fun onDestroy() {
         ana.removeCallbacksAndMessages(null)
         hat?.kapat(); hat = null
-        web.removeJavascriptInterface("AltyaziKopru")
-        web.destroy()
+        if (::web.isInitialized && !webKapandi) web.destroy()
         super.onDestroy()
     }
 
