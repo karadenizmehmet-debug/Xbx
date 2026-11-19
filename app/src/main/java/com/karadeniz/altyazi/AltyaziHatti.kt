@@ -178,7 +178,7 @@ class AltyaziHatti(
     /** Görünüm değişti: ekrandaki çeviriyi (yoksa 2,5 sn'lik örneği) TV'ye yeniden gönder. */
     fun stiliTvyeGonder() {
         val adres = tvAdresi()
-        if (adres.isBlank()) return
+        if (adres.isBlank() || kapandi) return
         if (ekrandaMetinVar && sonTr.isNotBlank()) tv.gonder(adres, sonTr, "", ayar.stilJson())
         else tv.gonder(adres, "Örnek altyazı metni", "", ayar.stilJson(), 2500)
     }

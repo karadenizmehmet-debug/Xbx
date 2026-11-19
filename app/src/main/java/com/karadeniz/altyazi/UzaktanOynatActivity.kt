@@ -27,6 +27,8 @@ import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
+import android.widget.SeekBar
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -36,6 +38,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.webkit.WebViewCompat
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import androidx.webkit.WebViewFeature
 import org.json.JSONObject
 
@@ -197,7 +200,8 @@ class UzaktanOynatActivity : AppCompatActivity() {
         sesTelefon = hap("Ses telefondan") { sesSec(true) }
         sesKapali = hap("Ses kapalı") { sesSec(false) }
         ses.addView(sesTelefon, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(8) })
-        ses.addView(sesKapali, LinearLayout.LayoutParams(0, dp(44), 1f))
+        ses.addView(sesKapali, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(8) })
+        ses.addView(dugme("☾ Karart", YAZI) { karart() }, LinearLayout.LayoutParams(0, dp(44), 0.8f))
         kok.addView(ses)
         sesBoya()
 
@@ -206,8 +210,8 @@ class UzaktanOynatActivity : AppCompatActivity() {
         fun ekle(v: View, son: Boolean = false) = dugmeler.addView(
             v, LinearLayout.LayoutParams(0, dp(52), 1f).apply { if (!son) marginEnd = dp(8) }
         )
-        ekle(dugme("☾ Karart", YAZI) { karart() })
         ekle(dugme("Bölge", YAZI) { bolgeSec() })
+        ekle(dugme("Görünüm", YAZI) { gorunumPaneli() })
         ekle(dugme("Kontrol et", YAZI) { kontrolEt() })
         ekle(dugme("■ Durdur", KIRMIZI) { finish() }, son = true)
         kok.addView(dugmeler, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
@@ -392,6 +396,104 @@ class UzaktanOynatActivity : AppCompatActivity() {
                 durum("Bölge kaydedildi.")
             }
         }.goster()
+    }
+
+    // ---------- Görünüm (çeviri sürerken, TV'de canlı) ----------
+
+    private var stilGonderBekliyor = false
+
+    /** TV'ye stil gönderimini 150 ms'de bire indir (kaydırıcı sürüklenirken ağı boğmasın). */
+    private fun stiliGonder() {
+        ceviri.typeface = YaziTipleri.getir(this, ayar.yaziTipi)
+        if (stilGonderBekliyor) return
+        stilGonderBekliyor = true
+        ana.postDelayed({ stilGonderBekliyor = false; hat?.stiliTvyeGonder() }, 150)
+    }
+
+    /** TV'deki altyazının yeri, boyutu, rengi, arka planı ve yazı tipi. Değişiklik TV'de hemen görünür. */
+    private fun gorunumPaneli() {
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(KART)
+            setPadding(dp(20), dp(16), dp(20), dp(24))
+        }
+        fun etiket(s: String) = yazi(s, 13f, SOLUK, kalin = true).apply { setPadding(0, dp(14), 0, dp(4)) }
+        fun kaydirici(min: Int, max: Int, deger: Int, degisti: (Int) -> Unit) = SeekBar(this).apply {
+            this.max = max - min
+            progress = (deger - min).coerceIn(0, max - min)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar, p: Int, kullanici: Boolean) { if (kullanici) degisti(p + min) }
+                override fun onStartTrackingTouch(sb: SeekBar) {}
+                override fun onStopTrackingTouch(sb: SeekBar) { hat?.stiliTvyeGonder() }
+            })
+        }
+
+        panel.addView(yazi("TV'deki altyazı", 18f, YAZI, kalin = true))
+        panel.addView(yazi("Değişiklikler TV'de hemen görünür.", 13f, SOLUK))
+
+        // Konum: kutunun üst kenarı (yükseklik korunur)
+        panel.addView(etiket("Konum (yukarı ↔ aşağı)"))
+        val k0 = ayar.kutu
+        val yukseklik = (k0.bottom - k0.top).coerceIn(0.08f, 0.5f)
+        panel.addView(kaydirici(0, 100, ((k0.top / (1f - yukseklik)) * 100).toInt()) { p ->
+            val ust = (1f - yukseklik) * p / 100f
+            ayar.kutu = RectF(k0.left, ust, k0.right, ust + yukseklik)
+            stiliGonder()
+        })
+
+        panel.addView(etiket("Yazı boyutu"))
+        panel.addView(kaydirici(12, 48, ayar.yaziBoyutu) { ayar.yaziBoyutu = it; stiliGonder() })
+
+        panel.addView(etiket("Arka plan koyuluğu"))
+        panel.addView(kaydirici(0, 100, ayar.arkaOpaklik) { ayar.arkaOpaklik = it; stiliGonder() })
+
+        panel.addView(etiket("Yazı rengi"))
+        val renkler = intArrayOf(Color.WHITE, Color.rgb(255, 230, 0), VURGU, YESIL, Color.rgb(255, 160, 200))
+        val renkSatiri = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fun renkleriCiz() {
+            for (i in 0 until renkSatiri.childCount) {
+                val r = renkler[i]
+                renkSatiri.getChildAt(i).background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL; setColor(r)
+                    if (r == ayar.yaziRengi) setStroke(dp(3), VURGU) else setStroke(dp(1), CERCEVE)
+                }
+            }
+        }
+        renkler.forEach { r ->
+            renkSatiri.addView(View(this).apply {
+                setOnClickListener { ayar.yaziRengi = r; renkleriCiz(); stiliGonder() }
+            }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(12) })
+        }
+        renkleriCiz()
+        panel.addView(renkSatiri)
+
+        panel.addView(etiket("Yazı tipi"))
+        val tipler = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fun tipleriCiz() {
+            for (i in 0 until tipler.childCount) {
+                val t = tipler.getChildAt(i) as TextView
+                val secili = YaziTipleri.liste[i].first == ayar.yaziTipi
+                t.background = yuvarlak(if (secili) VURGU else ARKA, 18, if (secili) null else CERCEVE)
+                t.setTextColor(if (secili) ARKA else YAZI)
+            }
+        }
+        YaziTipleri.liste.forEach { (id, ad) ->
+            tipler.addView(TextView(this).apply {
+                text = ad
+                textSize = 14f
+                typeface = YaziTipleri.getir(this@UzaktanOynatActivity, id)
+                setPadding(dp(14), dp(8), dp(14), dp(8))
+                setOnClickListener { ayar.yaziTipi = id; tipleriCiz(); stiliGonder() }
+            }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(8) })
+        }
+        tipleriCiz()
+        panel.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(tipler) })
+
+        BottomSheetDialog(this).apply {
+            setContentView(ScrollView(this@UzaktanOynatActivity).apply { addView(panel) })
+            show()
+        }
+        hat?.stiliTvyeGonder()   // açılınca TV'de örnek/şimdiki altyazıyı göster
     }
 
     // ---------- Karart ----------
