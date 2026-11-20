@@ -27,6 +27,10 @@ IP yazmaya gerek yok: TV'de Altyazı açıkken telefon aynı Wi-Fi'daki TV'yi ad
 
 [Releases](../../releases) sayfasından `Altyazi-vX.Y.Z.apk` dosyasını indirip kur. Her push'ta GitHub Actions APK'yı yeniden derler.
 
+## Fotoğraftan çeviri
+
+Remote Play başlatmadan çalışır. Ana ekrandaki **Ekrandan fotoğraf çevir** düğmesi telefonun kamerasını açar; TV/monitör ekranının fotoğrafı çekilince yazılar okunur (ML Kit OCR), Türkçeye çevrilir ve telefonda kartlar halinde gösterilir (altta İngilizce orijinal). Sözlük, çevrimiçi çeviri ve küfür sansürü ayarları burada da geçerlidir. Çevirileri tek dokunuşla kopyalayabilirsin. Kamera sistemin kamera uygulamasıyla açılır, ek izin gerekmez.
+
 ## Deneme (Xbox'sız)
 
 Ana ekrandaki Deneme kartı, Xbox bağlı olmadan TV'ye örnek altyazı, telefon ve bildirim çevirisi gönderir. Yazı tipi, renk, boyut ve hizalamayı böyle ayarlayabilirsin.

@@ -31,6 +31,22 @@
             android:exported="false" />
 
         <activity
+            android:name=".FotoCeviriActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" />
+
+        <!-- Fotoğraf çeviri: kamera uygulaması fotoğrafı bu geçici dosyaya yazar -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/dosya_yollari" />
+        </provider>
+
+        <activity
             android:name=".UzaktanOynatActivity"
             android:exported="false"
             android:screenOrientation="portrait"

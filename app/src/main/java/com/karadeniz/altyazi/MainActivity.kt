@@ -255,13 +255,24 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { baslatDurdur() }
         }
         baslatDugme.layoutParams = LinearLayout.LayoutParams(-1, dp(56)).apply { topMargin = dp(14) }
+        // Remote Play başlatmadan: ekranın fotoğrafını çek, çeviriyi telefonda gör
+        val fotoDugme = MaterialButton(this, null, MR.attr.materialButtonOutlinedStyle).apply {
+            text = "📷  Ekrandan fotoğraf çevir"
+            textSize = 15f
+            isAllCaps = false
+            cornerRadius = dp(18)
+            insetTop = 0
+            insetBottom = 0
+            setOnClickListener { startActivity(Intent(this@MainActivity, FotoCeviriActivity::class.java)) }
+        }
+        fotoDugme.layoutParams = LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) }
         sonYazi = yazi("", 14f).apply {
             setTextColor(yaziRengi)
             visibility = View.GONE
             setPadding(dp(14), dp(12), dp(14), dp(12))
             background = yuvarlak(ColorUtils.setAlphaComponent(renk(MR.attr.colorSurface), 170), 14)
         }
-        return kart(renk(MR.attr.colorPrimaryContainer), durumSatiri, baslatDugme, ust(sonYazi, 12))
+        return kart(renk(MR.attr.colorPrimaryContainer), durumSatiri, baslatDugme, fotoDugme, ust(sonYazi, 12))
     }
 
     private fun tvKarti(): View {
