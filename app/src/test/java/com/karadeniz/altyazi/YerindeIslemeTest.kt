@@ -75,4 +75,11 @@ class YerindeIslemeTest {
         assertTrue(YerindeIsleme.telefonEkraniMi(p, 0.08f))
         assertFalse(YerindeIsleme.telefonEkraniMi(p, 0.15f))
     }
+
+    @Test fun telefonOrani_dokuluAcikYuzeyTelefonSayilmaz() {
+        // Yol/tabela gibi dokulu açık pikseller: komşular arasında parlaklık farkı büyük
+        val a = 0xFFE6E6EA.toInt(); val b = 0xFF8C8C90.toInt()
+        val p = IntArray(100) { if (it % 2 == 0) a else b }
+        assertEquals(0f, YerindeIsleme.telefonOrani(p), 0.001f)
+    }
 }

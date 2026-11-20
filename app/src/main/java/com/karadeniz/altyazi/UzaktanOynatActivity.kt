@@ -680,7 +680,7 @@ class UzaktanOynatActivity : AppCompatActivity() {
         fun esikYaz(n: Int) { esikBaslik.text = "Telefon algılama hassasiyeti: %$n (düşük = daha kolay algılar)" }
         esikYaz(ayar.telefonEsik)
         panel.addView(esikBaslik)
-        panel.addView(kaydirici(1, 30, ayar.telefonEsik) { n -> ayar.telefonEsik = n; esikYaz(n) })
+        panel.addView(kaydirici(1, 50, ayar.telefonEsik) { n -> ayar.telefonEsik = n; esikYaz(n) })
 
         panel.addView(etiket("Küfür sansürü"))
         val sansurDugme = hap("") {}

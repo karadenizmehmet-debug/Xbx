@@ -127,7 +127,9 @@ class YerindeHatti(
         }.filter { YerindeIsleme.uygunMu(it.metin, min) }
             .sortedWith(compareBy({ it.kutu.ust }, { it.kutu.sol }))
         if (supheli) {
-            if (bloklar.any { acikArkaMi(it.arka) }) telefonAcik = true
+            // Yazıların arkası açıksa telefon sayılır, ama tek bir açık tabela/yol yazısı yetmez:
+            // en az 2 blok ve çoğunun arkası açık olmalı (mesaj balonları)
+            if (bloklar.size >= 2 && bloklar.count { acikArkaMi(it.arka) } * 2 > bloklar.size) telefonAcik = true
             else {
                 sonOkunan = tani
                 when (takip.gelen("", ayar.aralikMs)) {

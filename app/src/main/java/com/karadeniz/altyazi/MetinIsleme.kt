@@ -217,18 +217,37 @@ object YerindeIsleme {
     fun telefonEkraniMi(pikseller: IntArray, esik: Float = 0.15f): Boolean =
         pikseller.isNotEmpty() && telefonOrani(pikseller) >= esik
 
-    /** Örneklerin kaçı "açık, rengi soluk yüzey" (0..1). Telefon ekranı gri/beyaz/açık tonlu geniş bir yüzeydir. */
+    /**
+     * Örneklerin kaçı "açık, rengi soluk, düz yüzey" (0..1). Telefon ekranı gri/beyaz/açık tonlu geniş ve düz bir
+     * yüzeydir; yol, gökyüzü kırıntısı, tabela gibi dokulu/dağınık açık pikseller sayılmasın diye örnek, aynı
+     * satırdaki komşusuyla (sol ya da sağ) parlaklıkta [DUZ_FARK]'tan az ayrışmalıdır.
+     */
     fun telefonOrani(pikseller: IntArray): Float {
         if (pikseller.isEmpty()) return 0f
-        val uygun = pikseller.count { p ->
+        val n = Math.round(Math.sqrt(pikseller.size.toDouble())).toInt()
+        val kare = n * n == pikseller.size   // ızgara değilse düzlük denetimi atlanır
+        fun parlaklik(p: Int): Int {
+            val r = (p shr 16) and 0xFF; val g = (p shr 8) and 0xFF; val b = p and 0xFF
+            return (r * 299 + g * 587 + b * 114) / 1000
+        }
+        fun acikSoluk(p: Int): Boolean {
             val r = (p shr 16) and 0xFF; val g = (p shr 8) and 0xFF; val b = p and 0xFF
             val enb = maxOf(r, g, b); val enk = minOf(r, g, b)
-            val parlak = (r * 299 + g * 587 + b * 114) / 1000 >= 130
-            val soluk = enb == 0 || (enb - enk).toFloat() / enb <= 0.30f
-            parlak && soluk
+            return parlaklik(p) >= 130 && (enb == 0 || (enb - enk).toFloat() / enb <= 0.30f)
         }
+        fun duz(i: Int): Boolean {
+            if (!kare || n < 2) return true
+            val x = i % n
+            val l = parlaklik(pikseller[i])
+            val sol = x > 0 && Math.abs(l - parlaklik(pikseller[i - 1])) <= DUZ_FARK
+            val sag = x < n - 1 && Math.abs(l - parlaklik(pikseller[i + 1])) <= DUZ_FARK
+            return sol || sag
+        }
+        val uygun = pikseller.indices.count { acikSoluk(pikseller[it]) && duz(it) }
         return uygun.toFloat() / pikseller.size
     }
+
+    private const val DUZ_FARK = 10
 
     /** ML Kit köşe noktalarından eğik kutu: merkez, en (üst kenar), boy (sol kenar) ve üst kenarın açısı. */
     fun egikKutu(x: FloatArray, y: FloatArray): EgikKutu {

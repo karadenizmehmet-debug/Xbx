@@ -174,7 +174,7 @@ class Ayarlar(private val context: Context) {
 
     /** Telefon algılama hassasiyeti: örneklerin en az bu yüzdesi açık yüzey olmalı (düşük = daha kolay algılar). */
     var telefonEsik: Int
-        get() = p.getInt("telefonEsik", 8)
+        get() = p.getInt("telefonEsik", 20)
         set(v) = p.edit().putInt("telefonEsik", v).apply()
 
     /** Uygulama içi modda oyun sesi telefondan gelsin mi? */
